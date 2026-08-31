@@ -161,3 +161,50 @@ async def get_investigation_by_incident_endpoint(
     if result is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Investigation not found for incident")
     return result
+
+
+@router.get("/{investigation_id}/evidence", response_model=dict)
+async def get_investigation_evidence_endpoint(
+    investigation_id: UUID,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get evidence details for an investigation.
+    """
+    # First check if investigation exists
+    investigation = await get_investigation(db, investigation_id)
+    if not investigation:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Investigation not found")
+
+    # Get evidence using the incident_id from the investigation
+    from app.services.evidence_service import get_evidence
+    evidence = await get_evidence(db, investigation.incident_id)
+    return evidence.model_dump()
+
+
+@router.get("/{investigation_id}/export")
+async def export_investigation_endpoint(
+    investigation_id: UUID,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Export investigation data as CSV.
+    """
+    # First check if investigation exists
+    investigation = await get_investigation(db, investigation_id)
+    if not investigation:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Investigation not found")
+
+    # Generate CSV export
+    from app.services.evidence_service import generate_csv_export
+    csv_string = await generate_csv_export(db, investigation.incident_id)
+
+    # Return as CSV file download
+    from fastapi.responses import Response
+    return Response(
+        content=csv_string,
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": f"attachment; filename=investigation_{investigation_id}.csv"
+        }
+    )

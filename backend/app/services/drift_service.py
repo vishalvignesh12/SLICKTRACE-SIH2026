@@ -4,7 +4,7 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from geoalchemy2.shape import from_shape
 from shapely.geometry import shape
-from app.integrations.opendrift import FixtureDriftAdapter
+from app.integrations.opendrift import OpenDriftAdapter
 from app.models.drift_result import DriftResult
 from app.models.inference_log import MLInferenceLog
 from app.schemas.drift import HindcastRequest, ForecastRequest
@@ -14,7 +14,7 @@ async def calculate_hindcast(db: AsyncSession, req: HindcastRequest) -> DriftRes
     """Calculate hindcast trajectory and probable origin point/time."""
     start_time = time.time()
     
-    adapter = FixtureDriftAdapter()
+    adapter = OpenDriftAdapter()
     result = await adapter.run_hindcast(str(req.incident_id), req.slick_polygon.model_dump(), req.timestamp)
     latency_ms = int((time.time() - start_time) * 1000)
     
@@ -69,7 +69,7 @@ async def calculate_forecast(db: AsyncSession, req: ForecastRequest) -> DriftRes
     """Calculate forecast trajectory for the slick's future movement."""
     start_time = time.time()
     
-    adapter = FixtureDriftAdapter()
+    adapter = OpenDriftAdapter()
     result = await adapter.run_forecast(str(req.incident_id), req.slick_polygon.model_dump(), req.timestamp)
     latency_ms = int((time.time() - start_time) * 1000)
     
