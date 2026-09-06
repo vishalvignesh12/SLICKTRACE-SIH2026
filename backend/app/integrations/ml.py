@@ -98,9 +98,15 @@ class FixtureMLProvider(MLInferenceProvider):
         }
 
 
+import httpx
+import json
+from typing import Dict, Any
+from app.models.satellite_scene import SatelliteScene
+
+
 # TODO: Implement actual ML provider implementations (e.g., REST client, gRPC client)
 class RESTMLProvider(MLInferenceProvider):
-    """REST-based ML provider (placeholder for future implementation)."""
+    """REST-based ML provider."""
 
     def __init__(self, service_url: str, timeout_seconds: int = 30):
         self.service_url = service_url
@@ -109,12 +115,40 @@ class RESTMLProvider(MLInferenceProvider):
     async def predict(self, scene: SatelliteScene) -> Dict[str, Any]:
         """
         Call ML inference service via REST API.
-        This is a placeholder - actual implementation would make HTTP request.
         """
-        # TODO: Implement actual REST call to ML service
-        # For now, fall back to fixture behavior
-        fixture_provider = FixtureMLProvider()
-        return await fixture_provider.predict(scene)
+        try:
+            # Prepare request payload based on satellite scene
+            # This assumes the ML service expects certain fields from the scene
+            payload = {
+                "scene_id": str(scene.scene_id),
+                "satellite_id": scene.satellite_id,
+                "datetime": scene.datetime.isoformat() if scene.datetime else None,
+                "geometry": {
+                    "type": scene.geometry.type if scene.geometry else None,
+                    "coordinates": scene.geometry.coordinates if scene.geometry else None
+                },
+                "cloud_cover": scene.cloud_cover,
+                "product_type": scene.product_type,
+                "image_url": scene.image_url  # Include image URL for ML inference
+            }
+
+            # Remove None values
+            payload = {k: v for k, v in payload.items() if v is not None}
+
+            async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
+                response = await client.post(
+                    f"{self.service_url}/predict",
+                    json=payload
+                )
+                response.raise_for_status()
+                return response.json()
+
+        except httpx.TimeoutException:
+            raise Exception(f"ML service request timed out after {self.timeout_seconds} seconds")
+        except httpx.HTTPStatusError as e:
+            raise Exception(f"ML service returned error {e.response.status_code}: {e.response.text}")
+        except Exception as e:
+            raise Exception(f"Failed to call ML service: {str(e)}")
 
 
 def get_ml_provider() -> MLInferenceProvider:

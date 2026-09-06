@@ -1,0 +1,14 @@
+{
+  "data_root": "data/raw",
+  "out_dir": "models/oilspill-v1",
+  "tile_size": 512,
+  "batch_size": 8,
+  "epochs": 3,
+  "lr": 0.001,
+  "patience": 3,
+  "pos_weight": 5.0,
+  "num_workers": 0,
+  "device": "cpu",
+  "tiles_per_scene_cap": 1,
+  "max_train_scenes": 200
+}

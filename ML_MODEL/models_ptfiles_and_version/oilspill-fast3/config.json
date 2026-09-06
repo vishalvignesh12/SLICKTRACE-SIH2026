@@ -1,0 +1,16 @@
+{
+  "data_root": "data/raw",
+  "out_dir": "models/oilspill-fast3",
+  "tile_size": 256,
+  "batch_size": 8,
+  "epochs": 5,
+  "lr": 0.0005,
+  "patience": 10,
+  "bce_weight": 0.3,
+  "pos_weight": 5.0,
+  "fast_mode": true,
+  "num_workers": 4,
+  "device": "cpu",
+  "tiles_per_scene_cap": 4,
+  "max_train_scenes": 30
+}

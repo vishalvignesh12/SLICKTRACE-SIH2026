@@ -16,6 +16,8 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.coverage
+htmlcov/
 
 .venv/
 venv/
@@ -28,6 +30,7 @@ env/
 node_modules/
 dist/
 build/
+coverage/
 .next/
 .nuxt/
 .vite/
@@ -35,6 +38,13 @@ build/
 npm-debug.log*
 yarn-debug.log*
 pnpm-debug.log*
+
+# =========================
+# QA & Test Artifacts
+# =========================
+
+e2e_qa_output.json
+test_matrix_results.json
 
 # =========================
 # IDE

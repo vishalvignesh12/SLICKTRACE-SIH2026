@@ -12,12 +12,12 @@ class SlickDetection(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     incident_id = Column(UUID(as_uuid=True), ForeignKey("incidents.id", ondelete="CASCADE"), nullable=False)
     scene_id = Column(UUID(as_uuid=True), ForeignKey("satellite_scenes.id", ondelete="SET NULL"), nullable=True)
-    analysis_id = Column(String, nullable=False, index=True)  # Links to ML analysis job
+    analysis_id = Column(String, nullable=True, index=True)  # Links to ML analysis job
     detected = Column(Boolean, nullable=False, default=True)  # Whether oil spill was detected
     confidence = Column(Float, nullable=False)  # 0 to 1
-    model_version = Column(String, nullable=False)  # Version of ML model used
-    processing_time_ms = Column(Integer, nullable=False)  # Processing time in milliseconds
-    source_scene_id = Column(String, nullable=False)  # Original scene ID from data provider
+    model_version = Column(String, nullable=True, default="v1.0")  # Version of ML model used
+    processing_time_ms = Column(Integer, nullable=True, default=0)  # Processing time in milliseconds
+    source_scene_id = Column(String, nullable=True)  # Original scene ID from data provider
     geometry = Column(Geometry(geometry_type="POLYGON", srid=4326), nullable=False)
     area_km2 = Column(Float, nullable=False)
     length_km = Column(Float, nullable=True)

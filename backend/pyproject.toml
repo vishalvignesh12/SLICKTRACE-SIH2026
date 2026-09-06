@@ -25,6 +25,8 @@ dependencies = [
     "asyncpg>=0.31.0",
     "pytest>=9.1.1",
     "typing-extensions>=4.16.0",
+    "ultralytics>=8.0.0",
+    "opencv-python>=4.8.0",
 ]
 
 [project.optional-dependencies]

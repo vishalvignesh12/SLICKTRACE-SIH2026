@@ -15,15 +15,33 @@ from app.services.dashboard_service import to_geojson_polygon
 from app.services.satellite_ingestion_service import ingest_satellite_scene
 
 
-router = APIRouter(
-    prefix="/scenes",
-    tags=["Satellite Scenes"],
-    dependencies=[Depends(require_analyst)]
-)
-
-
-def scene_to_response(s: SatelliteScene) -> SceneResponse:
-    """Convert SatelliteScene database model to API response."""
+@router.get("", response_model=List[SceneResponse])
+async def list_scenes(db: AsyncSession = Depends(get_db)):
+    """List all registered satellite scenes (protected)."""
+    stmt = select(SatelliteScene)
+    res = await db.execute(stmt)
+    scenes = res.scalars().all()
+    
+    return [
+        SceneResponse(
+            id=s.id,
+            source=s.source,
+            scene_id=s.scene_id,
+            satellite=s.satellite,
+            sensor=s.sensor,
+            product_type=s.product_type,
+            polarization=s.polarization,
+            acquisition_time=s.acquisition_time,
+            processing_time=s.processing_time,
+            bbox=to_geojson_polygon(s.bbox),
+            image_url=s.image_url,
+            thumbnail_url=s.thumbnail_url,
+            scene_metadata=s.scene_metadata,
+            status=s.status,
+            created_at=s.created_at,
+            updated_at=s.updated_at
+        ) for s in scenes
+    ]
 
     return SceneResponse(
         id=s.id,
@@ -41,7 +59,7 @@ def scene_to_response(s: SatelliteScene) -> SceneResponse:
         scene_metadata=s.scene_metadata,
         status=s.status,
         created_at=s.created_at,
-        updated_at=s.updated_at,
+        updated_at=s.updated_at
     )
 
 
@@ -107,14 +125,31 @@ async def create_scene(
         image_url=req.image_url,
         thumbnail_url=req.thumbnail_url,
         scene_metadata=req.scene_metadata,
-        status=req.status or "RECEIVED",
+        status=req.status or 'RECEIVED'
     )
 
     db.add(s)
     await db.commit()
     await db.refresh(s)
 
-    return scene_to_response(s)
+    return SceneResponse(
+        id=s.id,
+        source=s.source,
+        scene_id=s.scene_id,
+        satellite=s.satellite,
+        sensor=s.sensor,
+        product_type=s.product_type,
+        polarization=s.polarization,
+        acquisition_time=s.acquisition_time,
+        processing_time=s.processing_time,
+        bbox=to_geojson_polygon(s.bbox),
+        image_url=s.image_url,
+        thumbnail_url=s.thumbnail_url,
+        scene_metadata=s.scene_metadata,
+        status=s.status,
+        created_at=s.created_at,
+        updated_at=s.updated_at
+    )
 
 
 @router.post(

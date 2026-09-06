@@ -256,5 +256,74 @@ def test_dashboard_investigations_endpoint_not_found(client, mock_db_session):
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
 
+def test_dashboard_endpoints_require_authentication():
+    """Test that all dashboard endpoints require authentication (return 401 without auth token)."""
+    unauth_client = TestClient(app)
+    endpoints = [
+        "/api/v1/dashboard/overview",
+        "/api/v1/dashboard/incidents",
+        "/api/v1/dashboard/spills",
+        "/api/v1/dashboard/vessels",
+        "/api/v1/dashboard/activity",
+        f"/api/v1/dashboard/investigations/{uuid4()}"
+    ]
+    for ep in endpoints:
+        response = unauth_client.get(ep)
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+def test_dashboard_and_admin_security_matrix():
+    """
+    Test complete security contract:
+    - dashboard without token -> 401
+    - dashboard with analyst token -> allowed (200)
+    - dashboard with admin token -> allowed (200)
+    - admin endpoint without token -> 401
+    - admin endpoint with analyst token -> 403
+    - admin endpoint with admin token -> allowed (200)
+    """
+    from app.core.security import create_access_token
+    from app.core.database import get_db
+
+    app.dependency_overrides.clear()
+
+    mock_db = AsyncMock()
+    mock_res = Mock()
+    mock_res.scalars.return_value.all.return_value = []
+    mock_res.scalars.return_value.first.return_value = None
+    mock_res.scalar.return_value = 0
+    mock_db.execute.return_value = mock_res
+    app.dependency_overrides[get_db] = lambda: mock_db
+
+    analyst_jwt = create_access_token({"sub": "analyst@test.com", "user_id": str(uuid4()), "role": "analyst", "name": "Analyst"})
+    admin_jwt = create_access_token({"sub": "admin@test.com", "user_id": str(uuid4()), "role": "admin", "name": "Admin"})
+
+    analyst_headers = {"Authorization": f"Bearer {analyst_jwt}"}
+    admin_headers = {"Authorization": f"Bearer {admin_jwt}"}
+
+    client = TestClient(app)
+
+    try:
+        # Dashboard without token -> 401
+        assert client.get("/api/v1/dashboard/overview").status_code == status.HTTP_401_UNAUTHORIZED
+
+        # Admin endpoint without token -> 401
+        assert client.get("/api/v1/admin/users").status_code == status.HTTP_401_UNAUTHORIZED
+
+        # Admin endpoint with analyst token -> 403 Forbidden
+        assert client.get("/api/v1/admin/users", headers=analyst_headers).status_code == status.HTTP_403_FORBIDDEN
+
+        # Admin endpoint with admin token -> 200 OK (allowed)
+        assert client.get("/api/v1/admin/users", headers=admin_headers).status_code == status.HTTP_200_OK
+
+        # Dashboard with analyst token -> 200 OK (allowed)
+        assert client.get("/api/v1/dashboard/overview", headers=analyst_headers).status_code == status.HTTP_200_OK
+
+        # Dashboard with admin token -> 200 OK (allowed)
+        assert client.get("/api/v1/dashboard/overview", headers=admin_headers).status_code == status.HTTP_200_OK
+    finally:
+        app.dependency_overrides.clear()
+
+
 if __name__ == "__main__":
     pytest.main([__file__])

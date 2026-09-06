@@ -243,9 +243,9 @@ async def _get_or_create_scene(db: AsyncSession, scene_id: str, ml_result: dict)
 
     if not scene:
         result = await db.execute(
-            select(SatelliteScene).where(SatelliteScene.scene_id == str(scene_id))
+            select(SatelliteScene).where(SatelliteScene.scene_id == scene_id)
         )
-        scene = result.scalar_one_or_none()
+        scene = result.scalars().first()
 
     if not scene:
         # Create new scene from ML result metadata

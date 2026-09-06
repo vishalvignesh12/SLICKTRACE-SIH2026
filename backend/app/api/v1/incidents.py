@@ -47,11 +47,22 @@ async def list_incidents(
     ]
 
 @router.get("/{id}", response_model=IncidentResponse)
-async def get_incident(id: UUID, db: AsyncSession = Depends(get_db)):
-    """Retrieve details for a specific incident (protected)."""
-    stmt = select(Incident).where(Incident.id == id)
+async def get_incident(id: str, db: AsyncSession = Depends(get_db)):
+    """Retrieve details for a specific incident by UUID or string name/code (protected)."""
+    inc_uuid = None
+    try:
+        inc_uuid = UUID(id)
+    except ValueError:
+        pass
+
+    if inc_uuid:
+        stmt = select(Incident).where(Incident.id == inc_uuid)
+    else:
+        stmt = select(Incident).where(Incident.name == id)
+
     res = await db.execute(stmt)
     inc = res.scalars().first()
+
     if not inc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Incident not found")
         
@@ -95,9 +106,19 @@ async def create_incident(req: IncidentCreate, db: AsyncSession = Depends(get_db
     )
 
 @router.put("/{id}", response_model=IncidentResponse)
-async def update_incident(id: UUID, req: IncidentCreate, db: AsyncSession = Depends(get_db)):
+async def update_incident(id: str, req: IncidentCreate, db: AsyncSession = Depends(get_db)):
     """Update details for an existing incident (protected)."""
-    stmt = select(Incident).where(Incident.id == id)
+    inc_uuid = None
+    try:
+        inc_uuid = UUID(id)
+    except ValueError:
+        pass
+
+    if inc_uuid:
+        stmt = select(Incident).where(Incident.id == inc_uuid)
+    else:
+        stmt = select(Incident).where(Incident.name == id)
+
     res = await db.execute(stmt)
     inc = res.scalars().first()
     if not inc:

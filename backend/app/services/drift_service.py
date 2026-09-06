@@ -58,6 +58,7 @@ async def calculate_hindcast(db: AsyncSession, req: HindcastRequest) -> DriftRes
         service_name="drift_service_hindcast",
         model_name="OpenDrift-Lagrangian",
         model_version="v1.10.4",
+        analysis_id="unknown",
         incident_id=str(req.incident_id),
         latency_ms=latency_ms,
         status_code=200
@@ -110,6 +111,7 @@ async def calculate_forecast(db: AsyncSession, req: ForecastRequest) -> DriftRes
         service_name="drift_service_forecast",
         model_name="OpenDrift-Lagrangian",
         model_version="v1.10.4",
+        analysis_id="unknown",
         incident_id=str(req.incident_id),
         latency_ms=latency_ms,
         status_code=200
