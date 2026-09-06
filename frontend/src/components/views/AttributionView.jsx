@@ -94,7 +94,10 @@ export default function AttributionView() {
               </span>
               <span className="text-secondary-fixed text-label-sm font-bold flex items-center gap-1 whitespace-nowrap shrink-0">
                 <span className="material-symbols-outlined text-[16px]">verified</span>
-                94% ML Confidence
+                {candidates[0].confidence != null ? `${candidates[0].confidence}%` : '—'} Attribution Confidence
+              </span>
+              <span className="px-2 py-0.5 bg-amber-200 text-amber-900 border border-amber-400 text-[10px] font-bold uppercase tracking-wider rounded font-mono shrink-0">
+                AIS: Fixture Adapter • Drift: Fixture Adapter
               </span>
             </div>
 

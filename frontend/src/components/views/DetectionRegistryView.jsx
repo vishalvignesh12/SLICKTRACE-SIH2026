@@ -23,19 +23,76 @@ export default function DetectionRegistryView() {
     severity: 'Medium'
   });
 
-  useEffect(() => {
-    async function loadDetections() {
-      try {
-        const data = await api.getDetections();
-        setDetections(data);
-      } catch (err) {
-        console.error('Error fetching detections:', err);
-      } finally {
-        setLoading(false);
-      }
+  const [analyzingScene, setAnalyzingScene] = useState(false);
+
+  const loadDetectionsData = async () => {
+    try {
+      setLoading(true);
+      const data = await api.getDetections();
+      setDetections(data);
+    } catch (err) {
+      console.error('Error fetching detections:', err);
+    } finally {
+      setLoading(false);
     }
-    loadDetections();
+  };
+
+  useEffect(() => {
+    loadDetectionsData();
   }, []);
+
+  const handleRunAnalysis = async () => {
+    setAnalyzingScene(true);
+    try {
+      const sceneId = `S1A_IW_GRDH_1SDV_${new Date().toISOString().replace(/[-:T]/g, '').substring(0, 14)}`;
+      await api.createScene({
+        source: 'COPERNICUS',
+        scene_id: sceneId,
+        satellite: 'Sentinel-1A',
+        sensor: 'C-SAR',
+        product_type: 'GRD',
+        polarization: 'VV+VH',
+        acquisition_time: new Date().toISOString(),
+        bbox: {
+          type: 'Polygon',
+          coordinates: [[[88.1, 14.7], [88.6, 14.7], [88.6, 15.2], [88.1, 15.2], [88.1, 14.7]]]
+        },
+        scene_metadata: { orbit: 'Ascending', sector: 'Bay of Bengal' },
+        status: 'INGESTED'
+      });
+      await api.analyzeScene(sceneId);
+      await loadDetectionsData();
+    } catch (err) {
+      console.error('Failed to run ML scene analysis:', err);
+      alert(`ML Analysis Notification: ${err.message}`);
+    } finally {
+      setAnalyzingScene(false);
+    }
+  };
+
+  const handleExportCSV = () => {
+    const headers = ['Detection ID', 'Timestamp', 'Region', 'Coordinates', 'Sensor', 'Area (km2)', 'Confidence', 'Severity', 'Status', 'Suspect Vessel'];
+    const rows = detections.map(d => [
+      d.id,
+      d.timestamp,
+      `"${d.region}"`,
+      `"${d.coordinates}"`,
+      `"${d.sensor}"`,
+      d.areaKm2,
+      `${d.confidence}%`,
+      d.severity,
+      d.status,
+      `"${d.suspectVessel || ''}"`
+    ]);
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `oil_spill_detections_${new Date().toISOString().substring(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   const filteredDetections = useMemo(() => {
     return detections.filter(item => {
@@ -194,20 +251,34 @@ export default function DetectionRegistryView() {
       {/* Page Title & Main Action Buttons */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-headline-lg font-bold text-primary tracking-tight">
-            Oil Spill Detection Registry
-          </h1>
+          <div className="flex items-center gap-3 flex-wrap mb-1">
+            <h1 className="text-headline-lg font-bold text-primary tracking-tight">
+              Oil Spill Detection Registry
+            </h1>
+            <span className="px-2 py-0.5 bg-amber-100 text-amber-800 border border-amber-300 text-[10px] font-bold uppercase tracking-wider rounded font-mono">
+              ML: FixtureMLProvider — SAR Real Integration Pending
+            </span>
+          </div>
           <p className="text-body-md text-on-surface-variant">
-            Master repository of satellite radar, optical, and aerial surveillance observations.
+            Master repository of satellite radar observations. Slick detection uses the fixture ML pipeline (synthetic data) until the real SAR segmentation model is connected.
           </p>
         </div>
 
         <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
           <Button
+            variant="secondary"
+            icon="satellite_alt"
+            size="sm"
+            onClick={handleRunAnalysis}
+            disabled={analyzingScene}
+          >
+            {analyzingScene ? 'Analyzing Scene...' : 'Run Satellite Analysis'}
+          </Button>
+          <Button
             variant="outline"
             icon="download"
             size="sm"
-            onClick={() => alert('Registry exported to official CSV format.')}
+            onClick={handleExportCSV}
           >
             Export CSV
           </Button>

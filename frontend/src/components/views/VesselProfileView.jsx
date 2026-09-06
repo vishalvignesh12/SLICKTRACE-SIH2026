@@ -29,7 +29,7 @@ export default function VesselProfileView() {
         <div className="flex flex-col items-center gap-3">
           <div className="w-8 h-8 border-3 border-primary border-t-transparent rounded-full animate-spin"></div>
           <span className="text-label-sm text-on-surface-variant font-semibold">
-            Retrieving Lloyd's / AIS Vessel Forensic Dossier...
+            Retrieving Vessel Forensic Profile (Fixture AIS Data)...
           </span>
         </div>
       </div>
@@ -41,11 +41,14 @@ export default function VesselProfileView() {
       {/* Top Breadcrumb & Actions Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex items-center gap-2 flex-wrap mb-1">
             <h1 className="text-headline-lg font-bold text-primary tracking-tight">
               Vessel Forensic Profile
             </h1>
-            <StatusChip status="Critical" label="Primary Suspect: 94% Attribution" />
+            <StatusChip status="Critical" label={`Primary Suspect${profile?.confidence != null ? `: ${profile.confidence}% Attribution` : ''}`} />
+            <span className="px-2 py-0.5 bg-amber-100 text-amber-800 border border-amber-300 text-[10px] font-bold uppercase tracking-wider rounded font-mono">
+              AIS: Fixture Data
+            </span>
           </div>
           <p className="text-body-md text-on-surface-variant">
             Official maritime registry records, ownership structure, MARPOL compliance history, and AIS telemetry audit.

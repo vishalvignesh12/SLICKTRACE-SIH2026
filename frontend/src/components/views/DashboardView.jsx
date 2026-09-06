@@ -242,7 +242,7 @@ export default function DashboardView() {
                   size="sm"
                   variant="secondary"
                   icon="directions_boat"
-                  onClick={() => navigateTo('vessel', { vesselName: incident.primarySuspect.name })}
+                  onClick={() => navigateTo('vessel', { vesselName: suspectName })}
                 >
                   Vessel Profile
                 </Button>
@@ -397,7 +397,7 @@ export default function DashboardView() {
                 <div className="flex items-center justify-between mb-1">
                   <StatusChip status={alert.severity} size="sm" />
                   <span className="text-[11px] font-mono text-on-surface-variant">
-                    {alert.timestamp.substring(11, 19)}
+                    {alert.timestamp ? String(alert.timestamp).substring(11, 19) : ''}
                   </span>
                 </div>
                 <h4 className="text-label-md font-bold text-primary leading-snug line-clamp-1">

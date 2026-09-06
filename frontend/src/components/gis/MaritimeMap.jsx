@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { geoJsonToLeaflet } from '../../services/api';
 
 // Fix for default Leaflet icon paths in Vite bundling
 delete L.Icon.Default.prototype._getIconUrl;
@@ -90,7 +91,7 @@ export default function MaritimeMap({
     }
 
     if (activeLayers.sarSlicks !== false) {
-      const slickCoords = [
+      let slickCoords = [
         [14.8850, 88.1920],
         [14.8980, 88.2450],
         [14.8620, 88.3580],
@@ -99,6 +100,15 @@ export default function MaritimeMap({
         [14.7920, 88.2410],
         [14.8350, 88.1850]
       ];
+
+      // Convert dynamic backend GeoJSON geometry if available
+      const rawGeom = incident?.geometry || incident?.slick_polygon || incident?.slick_detections?.[0]?.geometry;
+      if (rawGeom) {
+        const converted = geoJsonToLeaflet(rawGeom);
+        if (converted && Array.isArray(converted) && converted.length > 0) {
+          slickCoords = Array.isArray(converted[0]) && Array.isArray(converted[0][0]) ? converted[0] : converted;
+        }
+      }
 
       const slickPolygon = L.polygon(slickCoords, {
         color: '#ba1a1a', // Error red
@@ -109,7 +119,7 @@ export default function MaritimeMap({
       }).addTo(map);
 
       slickPolygon.bindTooltip(
-        `<strong>Incident INC-2026-001</strong><br/>Sentinel-1A Hydrocarbon Discharge<br/>Area: 46.8 km² | Confidence: 94%`,
+        `<strong>Incident ${incident?.id || 'INC-2026-001'}</strong><br/>${incident?.sensor || 'Sentinel-1A C-SAR'} Hydrocarbon Discharge<br/>Area: ${incident?.slickDimensions?.areaKm2 || '46.8'} km² | Confidence: 94%`,
         { sticky: true, className: 'leaflet-tactical-tooltip' }
       );
 

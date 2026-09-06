@@ -1,13 +1,13 @@
 from uuid import UUID
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.security import require_analyst
-from app.models.investigation import InvestigationStatus
+from app.models.investigation import Investigation, InvestigationStatus, InvestigationPriority
 from app.models.investigation_event import InvestigationEvent
-from app.models.investigation import InvestigationStatus
+from app.models.slick_detection import SlickDetection
 from app.services.investigation_service import (
     create_investigation,
     get_investigation,
@@ -18,6 +18,7 @@ from app.services.investigation_service import (
     investigation_to_response,
     get_investigation_details
 )
+from app.services.evidence_service import get_evidence, generate_csv_export
 from app.schemas.investigation import (
     InvestigationEntityCreate,
     InvestigationEntityUpdate,
@@ -27,10 +28,12 @@ from app.schemas.investigation import (
     InvestigationEventBase,
     InvestigationAggregatedResponse
 )
+from app.schemas.evidence import EvidenceResponse
 
 router = APIRouter(prefix="/investigations", tags=["Investigations"], dependencies=[Depends(require_analyst)])
 
-@router.post("/", response_model=InvestigationEntityResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=InvestigationEntityResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=InvestigationEntityResponse, status_code=status.HTTP_201_CREATED, include_in_schema=False)
 async def create_investigation_endpoint(
     investigation_in: InvestigationEntityCreate,
     db: AsyncSession = Depends(get_db)
@@ -49,20 +52,8 @@ async def create_investigation_endpoint(
 
     return investigation_to_response(investigation)
 
-@router.get("/{investigation_id}", response_model=InvestigationEntityResponse)
-async def get_investigation_endpoint(
-    investigation_id: UUID,
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    Get an investigation by ID.
-    """
-    investigation = await get_investigation(db, investigation_id)
-    if not investigation:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Investigation not found")
-    return investigation_to_response(investigation)
-
-@router.get("/", response_model=List[InvestigationEntityResponse])
+@router.get("", response_model=List[InvestigationEntityResponse])
+@router.get("/", response_model=List[InvestigationEntityResponse], include_in_schema=False)
 async def list_investigations_endpoint(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=100),
@@ -79,24 +70,90 @@ async def list_investigations_endpoint(
     )
     return [investigation_to_response(inv) for inv in investigations]
 
-@router.patch("/{investigation_id}", response_model=InvestigationEntityResponse)
-async def update_investigation_endpoint(
-    investigation_id: UUID,
-    investigation_in: InvestigationEntityUpdate,
+@router.get("/by-incident/{incident_id}", response_model=InvestigationAggregatedResponse)
+async def get_investigation_by_incident_endpoint(
+    incident_id: UUID,
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Update an investigation.
+    Get aggregated investigation details by incident ID (for dashboard backward compatibility).
     """
-    investigation = await update_investigation(db, investigation_id, investigation_in)
+    result = await get_investigation_details(db, incident_id)
+    if result is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Investigation not found for incident")
+    return result
+
+@router.get("/{investigation_id}/timeline", response_model=List[InvestigationEventResponse])
+async def get_investigation_timeline_endpoint(
+    investigation_id: UUID,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get the timeline of events for an investigation.
+    """
+    investigation = await get_investigation(db, investigation_id)
     if not investigation:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Investigation not found")
-    try:
-        await db.commit()
-    except Exception as e:
-        await db.rollback()
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error")
-    return investigation_to_response(investigation)
+
+    result = await db.execute(
+        select(InvestigationEvent)
+        .where(InvestigationEvent.investigation_id == investigation_id)
+        .order_by(InvestigationEvent.created_at.desc())
+    )
+    events = result.scalars().all()
+    return [InvestigationEventResponse.from_orm(event) for event in events]
+
+@router.get("/{investigation_id}/evidence", response_model=EvidenceResponse)
+async def get_investigation_evidence_endpoint(
+    investigation_id: UUID,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get evidence items compiled for an investigation.
+    """
+    investigation = await get_investigation(db, investigation_id)
+    incident_id = None
+    if investigation:
+        # Get incident from detection
+        det_stmt = select(SlickDetection).where(SlickDetection.id == investigation.detection_id)
+        det_res = await db.execute(det_stmt)
+        det = det_res.scalars().first()
+        if det:
+            incident_id = det.incident_id
+    if not incident_id:
+        # Fallback to checking if investigation_id is actually an incident_id
+        incident_id = investigation_id
+
+    evidence = await get_evidence(db, incident_id)
+    if not evidence:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evidence not found")
+    return evidence
+
+@router.get("/{investigation_id}/export")
+async def export_investigation_csv_endpoint(
+    investigation_id: UUID,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Export attribution scores and audit evidence for an investigation as CSV.
+    """
+    investigation = await get_investigation(db, investigation_id)
+    incident_id = None
+    if investigation:
+        det_stmt = select(SlickDetection).where(SlickDetection.id == investigation.detection_id)
+        det_res = await db.execute(det_stmt)
+        det = det_res.scalars().first()
+        if det:
+            incident_id = det.incident_id
+    if not incident_id:
+        incident_id = investigation_id
+
+    csv_data = await generate_csv_export(db, incident_id)
+    return Response(
+        content=csv_data,
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=investigation_{investigation_id}_attribution.csv"}
+    )
 
 @router.patch("/{investigation_id}/status", response_model=InvestigationEntityResponse)
 async def change_investigation_status_endpoint(
@@ -126,18 +183,24 @@ async def change_investigation_status_endpoint(
 
     return investigation_to_response(investigation)
 
-@router.get("/{investigation_id}/timeline", response_model=List[InvestigationEventResponse])
-async def get_investigation_timeline_endpoint(
+@router.patch("/{investigation_id}", response_model=InvestigationEntityResponse)
+async def update_investigation_endpoint(
     investigation_id: UUID,
+    investigation_in: InvestigationEntityUpdate,
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Get the timeline of events for an investigation.
+    Update an investigation.
     """
-    # First check if investigation exists
-    investigation = await get_investigation(db, investigation_id)
+    investigation = await update_investigation(db, investigation_id, investigation_in)
     if not investigation:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Investigation not found")
+    try:
+        await db.commit()
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error")
+    return investigation_to_response(investigation)
 
     # Get events ordered by created_at descending
     result = await db.execute(
@@ -172,9 +235,9 @@ async def get_investigation_by_incident_endpoint(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Get aggregated investigation details by incident ID (for dashboard backward compatibility).
+    Get an investigation by ID.
     """
-    result = await get_investigation_details(db, incident_id)
-    if result is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Investigation not found for incident")
-    return result
+    investigation = await get_investigation(db, investigation_id)
+    if not investigation:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Investigation not found")
+    return investigation_to_response(investigation)

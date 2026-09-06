@@ -27,6 +27,26 @@ export default function EvidenceDossierView() {
     window.print();
   };
 
+  const handleExportCSV = async () => {
+    const displayId = String(incident?.id || 'INC-2026-001');
+    try {
+      let invId = incident?.id;
+      // If investigation exists, use investigation id or export
+      const csvData = await api.exportInvestigationCsv(invId || '2f8a1304-fe74-4482-8311-5059da82c215');
+      const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', `evidence_dossier_${displayId}_${new Date().toISOString().substring(0, 10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      console.error('Export CSV failed:', err);
+      alert(`Export CSV Notification: ${err.message}`);
+    }
+  };
+
   if (loading || !incident) {
     return (
       <div className="flex items-center justify-center py-24">
@@ -73,6 +93,13 @@ export default function EvidenceDossierView() {
             onClick={() => navigateTo('gis', { incidentId: incident.id })}
           >
             GIS Forensics Map
+          </Button>
+          <Button
+            variant="outline"
+            icon="download"
+            onClick={handleExportCSV}
+          >
+            Export CSV
           </Button>
           <Button
             variant="primary"
@@ -147,6 +174,7 @@ export default function EvidenceDossierView() {
           <h3 className="text-title-lg font-bold text-primary border-b border-outline-variant pb-1 flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-primary"></span>
             2. Satellite SAR & Physical Observations
+            <span className="ml-2 px-2 py-0.5 bg-amber-100 text-amber-800 border border-amber-300 text-[10px] font-bold uppercase tracking-wider rounded font-mono">FIXTURE DATA — Sentinel-1A Real Integration Pending</span>
           </h3>
           <p className="text-body-md text-on-surface-variant">
             Radar backscatter suppression confirms damping of capillary ocean waves consistent with mineral oil slick emulsion.

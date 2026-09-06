@@ -134,9 +134,19 @@ async def process_ml_prediction(db: AsyncSession, ml_result: dict) -> SlickDetec
         region.region_index = i
         db.add(region)
 
-    # 9. Update detection with calculated total area (optional)
-    # Note: Individual region areas are stored in spill_regions table
-    # We could store total area in detection if needed, but PRD focuses on region-level
+    # 9. Update incident location to match detected slick centroid
+    if processed_regions:
+        try:
+            geoservice = GeospatialService()
+            centroid = geoservice.calculate_centroid(processed_regions[0].geometry)
+            if centroid:
+                incident.location = from_shape(shape({
+                    "type": "Point",
+                    "coordinates": [centroid["lon"], centroid["lat"]]
+                }), srid=4326)
+                db.add(incident)
+        except Exception:
+            pass
 
     try:
         await db.commit()
@@ -323,6 +333,17 @@ async def _get_or_create_incident(db: AsyncSession, scene: SatelliteScene) -> In
     incident = result.scalars().first()
 
     if not incident:
+        # Calculate location from scene bbox if available
+        init_coords = [88.2915, 14.8214]  # Default Bay of Bengal Sector
+        if scene.bbox:
+            try:
+                geoservice = GeospatialService()
+                centroid = geoservice.calculate_centroid(scene.bbox)
+                if centroid and (centroid["lat"] != 0.0 or centroid["lon"] != 0.0):
+                    init_coords = [centroid["lon"], centroid["lat"]]
+            except Exception:
+                pass
+
         # Create new incident
         incident = Incident(
             name=f"Incident for Scene {scene.scene_id}",
@@ -330,7 +351,7 @@ async def _get_or_create_incident(db: AsyncSession, scene: SatelliteScene) -> In
             timestamp=scene.acquisition_time,
             location=from_shape(shape({
                 "type": "Point",
-                "coordinates": [0.0, 0.0]  # Will be updated based on detection
+                "coordinates": init_coords
             }), srid=4326),
             status="DETECTED"
         )

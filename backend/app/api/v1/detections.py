@@ -53,29 +53,6 @@ async def analyze(req: AnalyzeRequest, db: AsyncSession = Depends(get_db)):
     )
 
 
-@router.get("/{detection_id}", response_model=DetectionResponse)
-async def get_detection(detection_id: UUID, db: AsyncSession = Depends(get_db)):
-    """Get a specific detection by ID."""
-    stmt = select(SlickDetection).where(SlickDetection.id == detection_id)
-    res = await db.execute(stmt)
-    detection = res.scalars().first()
-
-    if not detection:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Detection not found")
-
-    return DetectionResponse(
-        detection_id=detection.id,
-        slick_polygon=to_geojson_polygon(detection.geometry),
-        area_km2=detection.area_km2,
-        length_km=detection.length_km,
-        width_km=detection.width_km,
-        orientation_deg=detection.orientation_deg,
-        confidence=detection.confidence,
-        age_estimate_hours=detection.age_estimate_hours,
-        age_confidence=detection.age_confidence
-    )
-
-
 @router.get("/analysis/{analysis_id}", response_model=DetectionResponse)
 async def get_detection_by_analysis(analysis_id: str, db: AsyncSession = Depends(get_db)):
     """Get detection by analysis ID."""
@@ -129,6 +106,29 @@ async def get_detections_by_scene(scene_id: str, db: AsyncSession = Depends(get_
             age_confidence=d.age_confidence
         ) for d in detections
     ]
+
+
+@router.get("/{detection_id}", response_model=DetectionResponse)
+async def get_detection(detection_id: UUID, db: AsyncSession = Depends(get_db)):
+    """Get a specific detection by ID."""
+    stmt = select(SlickDetection).where(SlickDetection.id == detection_id)
+    res = await db.execute(stmt)
+    detection = res.scalars().first()
+
+    if not detection:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Detection not found")
+
+    return DetectionResponse(
+        detection_id=detection.id,
+        slick_polygon=to_geojson_polygon(detection.geometry),
+        area_km2=detection.area_km2,
+        length_km=detection.length_km,
+        width_km=detection.width_km,
+        orientation_deg=detection.orientation_deg,
+        confidence=detection.confidence,
+        age_estimate_hours=detection.age_estimate_hours,
+        age_confidence=detection.age_confidence
+    )
 
 
 @router.get("/{detection_id}/regions/{region_id}", response_model=SpillRegionResponse)
