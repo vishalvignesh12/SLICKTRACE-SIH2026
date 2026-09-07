@@ -5,7 +5,7 @@ Provides S3-compatible interface for R2 operations.
 
 import boto3
 from botocore.exceptions import ClientError, NoCredentialsError
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from logger import setup_logger
 from config import Config
 

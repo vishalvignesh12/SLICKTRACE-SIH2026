@@ -5,7 +5,7 @@ Polls Cloudflare R2 for new Sentinel-1 SAR images and submits them to the ingest
 
 import time
 import threading
-from typing import Optional
+from typing import Any, Dict, Optional
 from config import Config
 from logger import setup_logger
 from r2_client import R2Client
