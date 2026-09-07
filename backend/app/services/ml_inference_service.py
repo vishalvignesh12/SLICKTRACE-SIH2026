@@ -108,6 +108,74 @@ def convert_ml_to_detection_format(
     # Convert to format expected by detection service
     # This creates a single spill region matching the overall detection
     unique_suffix = uuid4().hex[:8].upper()
+    geoservice = GeospatialService()
+
+    # If ml_prediction already has structured spill_regions, use them
+    input_regions = ml_prediction.get("spill_regions") or []
+    processed_regions = []
+
+    if input_regions:
+        for i, reg in enumerate(input_regions):
+            reg_geom = reg.get("geometry") or ml_prediction["geometry"]
+            reg_centroid = reg.get("centroid", {"lat": 0.0, "lon": 0.0})
+            reg_bbox = reg.get("bbox", {"min_lat": 0.0, "min_lon": 0.0, "max_lat": 0.0, "max_lon": 0.0})
+
+            # Calculate centroid & bbox from geometry if valid
+            try:
+                geom_shape = shape(reg_geom)
+                if not geom_shape.is_empty and geom_shape.area > 0:
+                    c = geoservice.calculate_centroid(from_shape(geom_shape, srid=4326))
+                    if c:
+                        reg_centroid = {"lat": c["lat"], "lon": c["lon"]}
+                    b = geoservice.calculate_bounding_box(from_shape(geom_shape, srid=4326))
+                    if b:
+                        reg_bbox = b
+            except Exception:
+                pass
+
+            processed_regions.append({
+                "region_id": reg.get("region_id") or f"region_{unique_suffix.lower()}_{i+1}",
+                "confidence": float(reg.get("confidence", ml_prediction["confidence"])),
+                "area_m2": float(reg.get("area_m2", float(ml_prediction["area_km2"]) * 1_000_000)),
+                "centroid": reg_centroid,
+                "geometry": reg_geom,
+                "bbox": reg_bbox,
+                "mask_uri": reg.get("mask_uri"),
+                "prediction_uri": reg.get("prediction_uri")
+            })
+    elif ml_prediction.get("detected"):
+        # Create a single default region matching the overall detection ONLY if oil spill was detected
+        reg_centroid = {"lat": 0.0, "lon": 0.0}
+        reg_bbox = {"min_lat": 0.0, "min_lon": 0.0, "max_lat": 0.0, "max_lon": 0.0}
+
+        try:
+            geom_shape = shape(ml_prediction["geometry"])
+            if not geom_shape.is_empty and geom_shape.area > 0:
+                c = geoservice.calculate_centroid(from_shape(geom_shape, srid=4326))
+                if c:
+                    reg_centroid = {"lat": c["lat"], "lon": c["lon"]}
+                b = geoservice.calculate_bounding_box(from_shape(geom_shape, srid=4326))
+                if b:
+                    reg_bbox = b
+        except Exception:
+            pass
+
+        processed_regions = [
+            {
+                "region_id": f"region_{unique_suffix.lower()}",
+                "confidence": float(ml_prediction["confidence"]),
+                "area_m2": float(ml_prediction["area_km2"]) * 1_000_000,
+                "centroid": reg_centroid,
+                "geometry": ml_prediction["geometry"],
+                "bbox": reg_bbox,
+                "mask_uri": ml_prediction.get("mask_uri"),
+                "prediction_uri": ml_prediction.get("prediction_uri")
+            }
+        ]
+    else:
+        # Not detected and no regions: leave processed_regions empty
+        processed_regions = []
+
     converted = {
         "analysis_id": f"ANL_{unique_suffix}",
         "scene_id": scene.scene_id,
@@ -122,49 +190,8 @@ def convert_ml_to_detection_format(
         "orientation_deg": ml_prediction.get("orientation_deg"),
         "age_estimate_hours": ml_prediction.get("age_estimate_hours"),
         "age_confidence": ml_prediction.get("age_confidence"),
-        "spill_regions": [
-            {
-                "region_id": f"region_{unique_suffix.lower()}",
-                "confidence": float(ml_prediction["confidence"]),
-                "area_m2": float(ml_prediction["area_km2"]) * 1_000_000,  # Convert km2 to m2
-                "centroid": {
-                    "lat": 0.0,  # Placeholder - would be calculated from geometry
-                    "lon": 0.0   # Placeholder - would be calculated from geometry
-                },
-                "geometry": ml_prediction["geometry"],
-                "bbox": {
-                    "min_lat": 0.0,  # Placeholder
-                    "min_lon": 0.0,  # Placeholder
-                    "max_lat": 0.0,  # Placeholder
-                    "max_lon": 0.0   # Placeholder
-                },
-                "mask_uri": ml_prediction.get("mask_uri"),
-                "prediction_uri": ml_prediction.get("prediction_uri")
-            }
-        ]
+        "spill_regions": processed_regions
     }
-
-    # Calculate actual centroid and bounding box from geometry
-    try:
-        geom_shape = shape(ml_prediction["geometry"])
-        geoservice = GeospatialService()
-
-        # Update centroid
-        centroid = geoservice.calculate_centroid(from_shape(geom_shape, srid=4326))
-        if centroid:
-            converted["spill_regions"][0]["centroid"]["lat"] = centroid["lat"]
-            converted["spill_regions"][0]["centroid"]["lon"] = centroid["lon"]
-
-        # Update bounding box
-        bbox = geoservice.calculate_bounding_box(from_shape(geom_shape, srid=4326))
-        if bbox:
-            converted["spill_regions"][0]["bbox"]["min_lat"] = bbox["min_lat"]
-            converted["spill_regions"][0]["bbox"]["min_lon"] = bbox["min_lon"]
-            converted["spill_regions"][0]["bbox"]["max_lat"] = bbox["max_lat"]
-            converted["spill_regions"][0]["bbox"]["max_lon"] = bbox["max_lon"]
-    except Exception:
-        # If geometry processing fails, keep placeholders - validation will catch issues later
-        pass
 
     return converted
 

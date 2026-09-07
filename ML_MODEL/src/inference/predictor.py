@@ -43,12 +43,15 @@ class OilSpillPredictor:
 
     def _read_image(self, path: str):
         transform = None
+        crs = None
         if path.lower().endswith((".tif", ".tiff")) and _HAS_RASTERIO:
             try:
                 with rasterio.open(path) as src:
                     arr = src.read().astype(np.float32)  # (bands, H, W)
-                    if src.transform is not None and src.crs is not None:
+                    if src.transform is not None:
                         transform = src.transform
+                    if src.crs is not None:
+                        crs = src.crs
             except Exception:
                 arr = tifffile.imread(path).astype(np.float32)
                 if arr.ndim == 3:
@@ -60,7 +63,7 @@ class OilSpillPredictor:
 
         if arr.shape[0] == 1:
             arr = arr.repeat(2, axis=0)
-        return arr[:2], transform
+        return arr[:2], transform, crs
 
     @torch.no_grad()
     def predict(
@@ -73,7 +76,7 @@ class OilSpillPredictor:
         high_thr: float = 0.6,
         min_area_px: int = 50,
     ) -> PredictionResult:
-        raw, transform = self._read_image(image_path)
+        raw, transform, crs = self._read_image(image_path)
         h, w = raw.shape[1], raw.shape[2]
         normed = normalize_sar(raw)
 
@@ -92,12 +95,12 @@ class OilSpillPredictor:
         present_mask = (full_prob >= high_thr).astype(np.uint8)
         likely_mask = ((full_prob >= low_thr) & (full_prob < high_thr)).astype(np.uint8)
 
-        # Convert each mask to region polygons
+        # Convert each mask to region polygons (with CRS conversion to EPSG:4326)
         present_regions = [
-            SpillRegion(**poly) for poly in mask_to_polygons(present_mask, transform)
+            SpillRegion(**poly) for poly in mask_to_polygons(present_mask, transform, crs)
         ]
         likely_regions = [
-            SpillRegion(**poly) for poly in mask_to_polygons(likely_mask, transform)
+            SpillRegion(**poly) for poly in mask_to_polygons(likely_mask, transform, crs)
         ]
 
         max_conf = float(full_prob.max()) if full_prob.size else 0.0

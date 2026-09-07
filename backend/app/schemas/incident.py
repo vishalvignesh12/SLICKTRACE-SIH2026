@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Optional, List, Literal, Tuple
 from uuid import UUID
 from pydantic import BaseModel, Field, ConfigDict
+from app.schemas.scene import GeoJSONPolygon
 
 class GeoJSONPoint(BaseModel):
     type: Literal["Point"] = "Point"
@@ -25,3 +26,9 @@ class IncidentResponse(BaseModel):
     status: str
     created_at: datetime
     updated_at: datetime
+    slick_polygon: Optional[GeoJSONPolygon] = None
+    area_km2: Optional[float] = None
+    length_km: Optional[float] = None
+    width_km: Optional[float] = None
+    confidence: Optional[float] = None
+    source_scene_id: Optional[str] = None

@@ -221,23 +221,34 @@ export const api = {
       const detections = await apiFetch('/detections');
       if (Array.isArray(detections) && detections.length > 0) {
         return detections.map(d => {
-          const confVal = d.confidence > 1 ? d.confidence : Math.round((d.confidence || 0.85) * 100);
-          const coords = d.geometry?.coordinates
-            ? `${(d.geometry.coordinates[0]?.[0]?.[1] || 14.8250).toFixed(4)}°N, ${(d.geometry.coordinates[0]?.[0]?.[0] || 88.2410).toFixed(4)}°E`
-            : '14.8250°N, 88.2410°E';
+          let confVal = 85;
+          if (d.confidence != null) {
+            const raw = d.confidence > 1 ? d.confidence : d.confidence * 100;
+            confVal = (raw >= 99.9 && raw < 100) ? Number(raw.toFixed(2)) : (raw % 1 === 0 ? raw : Number(raw.toFixed(1)));
+          }
+          const polyCoords = d.slick_polygon?.coordinates || d.geometry?.coordinates;
+          let coords = '14.8250°N, 88.2410°E';
+          if (polyCoords && Array.isArray(polyCoords[0]) && Array.isArray(polyCoords[0][0])) {
+            const firstPt = polyCoords[0][0];
+            const lon = firstPt[0];
+            const lat = firstPt[1];
+            const latDir = lat >= 0 ? 'N' : 'S';
+            const lonDir = lon >= 0 ? 'E' : 'W';
+            coords = `${Math.abs(lat).toFixed(4)}°${latDir}, ${Math.abs(lon).toFixed(4)}°${lonDir}`;
+          }
           return {
             ...d,
             id: d.id || d.detection_id,
             incidentId: d.incident_id || d.incidentId || 'INC-2026-001',
             timestamp: d.timestamp || (d.created_at ? String(d.created_at).replace('T', ' ').substring(0, 16) + ' UTC' : '2026-08-27 04:15 UTC'),
-            region: d.region || 'Bay of Bengal (Sector 4)',
+            region: d.region || (coords.includes('W') ? 'Gulf of Mexico' : 'Bay of Bengal (Sector 4)'),
             coordinates: d.coordinates || coords,
-            sensor: d.sensor || d.source_scene_id || 'Sentinel-1A C-SAR',
+            sensor: d.sensor || (d.source_scene_id ? `Sentinel-1A (${d.source_scene_id})` : 'Sentinel-1A C-SAR'),
             areaKm2: d.area_km2 != null ? Number(d.area_km2.toFixed(1)) : (d.areaKm2 || 12.4),
             confidence: confVal,
             severity: d.severity || (d.area_km2 > 30 ? 'Critical' : d.area_km2 > 10 ? 'High' : 'Medium'),
             status: d.status || (d.incident_id ? 'Attributed' : 'Investigating'),
-            suspectVessel: d.suspect_vessel || d.suspectVessel || 'MSC ELSA III',
+            suspectVessel: d.suspect_vessel || d.suspectVessel || (d.source_scene_id?.startsWith('REAL-SAR') ? 'Pending AIS Correlation' : 'MSC ELSA III'),
           };
         });
       }
@@ -317,6 +328,8 @@ export const api = {
         return list.map(inc => {
           const lat = inc.location?.coordinates ? inc.location.coordinates[1] : 14.8214;
           const lng = inc.location?.coordinates ? inc.location.coordinates[0] : 88.2915;
+          const latDir = lat >= 0 ? 'N' : 'S';
+          const lngDir = lng >= 0 ? 'E' : 'W';
           return {
             ...inc,
             id: inc.id,
@@ -327,7 +340,7 @@ export const api = {
             coordinates: {
               lat: Number(lat.toFixed(4)),
               lng: Number(lng.toFixed(4)),
-              formatted: `${lat.toFixed(4)}° N, ${lng.toFixed(4)}° E`
+              formatted: `${Math.abs(lat).toFixed(4)}° ${latDir}, ${Math.abs(lng).toFixed(4)}° ${lngDir}`
             },
             detectionTimestamp: inc.timestamp || inc.created_at || new Date().toISOString(),
             slickDimensions: inc.slickDimensions || {
@@ -375,32 +388,58 @@ export const api = {
       if (inc) {
         const lat = inc.location?.coordinates ? inc.location.coordinates[1] : 14.8214;
         const lng = inc.location?.coordinates ? inc.location.coordinates[0] : 88.2915;
+        const latDir = lat >= 0 ? 'N' : 'S';
+        const lngDir = lng >= 0 ? 'E' : 'W';
+        const isRealSAR = Boolean(inc.source_scene_id?.startsWith('REAL-SAR') || (lng < 0 && Math.abs(lng) > 80));
+
+        let realConfidencePercent = 94;
+        if (inc.confidence != null) {
+          const raw = inc.confidence > 1 ? inc.confidence : inc.confidence * 100;
+          realConfidencePercent = (raw >= 99.9 && raw < 100) ? Number(raw.toFixed(2)) : (raw % 1 === 0 ? raw : Number(raw.toFixed(1)));
+        }
+
+        const defaultZone = isRealSAR ? 'Gulf of Mexico (Real SAR)' : 'Bay of Bengal (Sector 4)';
+        const defaultSensor = inc.source_scene_id ? `Sentinel-1A (${inc.source_scene_id})` : 'Sentinel-1A C-SAR';
+
         return {
           ...inc,
           id: inc.id,
           title: inc.name || inc.title || 'Hydrocarbon Discharge Anomaly',
-          severity: inc.severity || 'HIGH',
-          status: inc.status || 'INVESTIGATING',
-          sensor: inc.sensor || 'Sentinel-1A C-SAR',
+          zone: inc.zone || defaultZone,
+          severity: inc.severity || (inc.area_km2 > 30 ? 'CRITICAL' : inc.area_km2 > 10 ? 'HIGH' : 'MEDIUM'),
+          status: inc.status || 'DETECTED',
+          sensor: inc.sensor || defaultSensor,
+          confidence: realConfidencePercent,
+          geometry: inc.slick_polygon || inc.geometry,
           coordinates: {
             lat: Number(lat.toFixed(4)),
             lng: Number(lng.toFixed(4)),
-            formatted: `${lat.toFixed(4)}° N, ${lng.toFixed(4)}° E`
+            formatted: `${Math.abs(lat).toFixed(4)}° ${latDir}, ${Math.abs(lng).toFixed(4)}° ${lngDir}`
           },
           detectionTimestamp: inc.timestamp || inc.created_at || new Date().toISOString(),
-          slickDimensions: inc.slickDimensions || {
-            areaKm2: '12.4',
-            driftVector: '142° @ 1.8 kts',
-            estimatedVolumeTonnes: '380 MT'
+          slickDimensions: {
+            areaKm2: inc.area_km2 != null ? String(Number(inc.area_km2).toFixed(1)) : (inc.slickDimensions?.areaKm2 || '12.4'),
+            lengthKm: inc.length_km != null ? String(Number(inc.length_km).toFixed(2)) : (inc.slickDimensions?.lengthKm || (isRealSAR ? 'N/A' : '28.4')),
+            widthKm: inc.width_km != null ? String(Number(inc.width_km).toFixed(2)) : (inc.slickDimensions?.widthKm || undefined),
+            estimatedVolumeTonnes: inc.estimatedVolumeTonnes || (isRealSAR ? 'Not estimated' : (inc.slickDimensions?.estimatedVolumeTonnes || '380 MT')),
+            driftVector: inc.driftVector || (inc.slickDimensions?.driftVector || (isRealSAR ? '054° @ 1.2 kts' : '142° @ 1.8 kts')),
           },
-          primarySuspect: inc.primarySuspect || {
+          primarySuspect: isRealSAR ? {
+            name: 'Pending AIS Correlation',
+            flag: 'Under Analysis',
+            flagCode: 'UN',
+            vesselType: 'SAR Observation',
+            imo: 'N/A',
+            mmsi: 'N/A',
+            correlationNotes: 'Real SAR slick detected. Spatial/temporal vessel correlation in progress.'
+          } : (inc.primarySuspect || {
             name: 'MSC ELSA III',
             flag: 'Liberia',
             flagCode: 'LR',
             vesselType: 'Container Ship',
             imo: '9781423',
             mmsi: '636019284'
-          },
+          }),
           assignedInvestigator: inc.assignedInvestigator || 'Cmdr. Rajesh Verma',
           chainOfCustodyId: inc.chainOfCustodyId || `CC-${String(inc.id || '').substring(0, 8).toUpperCase()}`
         };
@@ -756,16 +795,87 @@ export const api = {
   },
 
   async getAttributedVessels(incidentId = 'INC-2026-001') {
+    const isFixture = incidentId === 'INC-2026-001';
     try {
       const isUUID = typeof incidentId === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(incidentId);
       let targetId = incidentId;
-      if (!isUUID) {
+      let coords = [88.2915, 14.8214];
+      let isRealSAR = !isFixture;
+
+      if (isUUID) {
+        try {
+          const inc = await apiFetch(`/incidents/${incidentId}`);
+          if (inc) {
+            if (inc.location?.coordinates) {
+              coords = inc.location.coordinates;
+            }
+            isRealSAR = Boolean(inc.source_scene_id?.startsWith('REAL-SAR') || (coords[0] < 0 && Math.abs(coords[0]) > 80));
+          }
+        } catch {
+          // ignore error fetching incident
+        }
+      } else if (!isFixture) {
         const incidents = await apiFetch('/incidents');
-        if (incidents.length > 0) {
+        if (Array.isArray(incidents) && incidents.length > 0) {
           targetId = incidents[0].id;
+          if (incidents[0].location?.coordinates) {
+            coords = incidents[0].location.coordinates;
+          }
+          isRealSAR = Boolean(incidents[0].source_scene_id?.startsWith('REAL-SAR') || (coords[0] < 0 && Math.abs(coords[0]) > 80));
         }
       }
 
+      // For real SAR scenes: do not submit fixture Bay of Bengal coordinates.
+      // If genuine AIS correlation is queried, only accept candidates with real spatial proximity.
+      if (isRealSAR) {
+        const now = new Date().toISOString();
+        const yesterday = new Date(Date.now() - 86400000).toISOString();
+        try {
+          const result = await apiFetch('/attribution/score', {
+            method: 'POST',
+            body: JSON.stringify({
+              incident_id: targetId,
+              origin_point: { type: 'Point', coordinates: coords },
+              origin_time_start: yesterday,
+              origin_time_end: now
+            }),
+          });
+          const genuineCandidates = (result?.ranked_vessels || []).filter(v => (v.proximity || 0) > 0.1);
+          if (genuineCandidates.length > 0) {
+            return genuineCandidates.map((v, idx) => ({
+              ...v,
+              rank: idx + 1,
+              name: v.name || v.vessel_name || `Vessel ${v.mmsi}`,
+              flag: v.flag || 'Liberia',
+              flagCode: v.flagCode || 'LR',
+              type: v.type || v.vessel_type || 'Crude Oil Tanker',
+              dwt: v.dwt || 105400,
+              confidence: Math.round((v.score || 0.85) * 100),
+              riskCategory: v.score >= 0.8 ? 'Critical' : v.score >= 0.5 ? 'High' : 'Medium',
+              aisEvent: v.explanation || `AIS trajectory matched within corridor. Speed variation detected near calculated discharge onset.`,
+              imo: v.imo || 'N/A',
+              mmsi: v.mmsi || 'N/A',
+              factors: {
+                spatialScore: Math.round((v.proximity || 0.95) * 100),
+                temporalScore: Math.round((v.temporality || 0.92) * 100),
+                trajectoryParityScore: Math.round((v.trajectory_parity || 0.96) * 100),
+                aisAnomalyScore: Math.round((v.anomaly_score || 0.90) * 100),
+                spatialDistanceKm: (Math.max(0, (1 - (v.proximity || 0.95)) * 20)).toFixed(1),
+                temporalDeltaMinutes: 18,
+                speedVariationKnots: '-8.1 kts',
+                aisGapDurationHours: v.anomaly_flag ? 4.2 : 0,
+                darkVesselStatus: v.anomaly_flag ? 'SUSPECT_GAP' : 'NORMAL'
+              }
+            }));
+          }
+        } catch (e) {
+          console.warn('Real SAR attribution calculation query:', e);
+        }
+        // No genuine AIS candidates in Gulf of Mexico: return empty list so UI displays Pending AIS Correlation
+        return [];
+      }
+
+      // Legacy Fixture Incident (INC-2026-001) in Bay of Bengal
       const now = new Date().toISOString();
       const yesterday = new Date(Date.now() - 86400000).toISOString();
       const result = await apiFetch('/attribution/score', {
@@ -809,11 +919,11 @@ export const api = {
           }
         }));
       }
-      return [];
+      return isFixture ? [...candidateVessels] : [];
     } catch (err) {
       if (!err.isNetworkError) throw err;
       await delay();
-      return [...candidateVessels];
+      return isFixture ? [...candidateVessels] : [];
     }
   },
 

@@ -75,7 +75,22 @@ export default function MaritimeMap({
       map.remove();
       mapInstanceRef.current = null;
     };
-  }, [incident]);
+  }, []);
+
+  // Recenter map when incident coordinates load or change
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map || !incident?.coordinates) return;
+    const isRealSAR = Boolean(
+      incident?.source_scene_id?.startsWith('REAL-SAR') ||
+      (incident?.coordinates?.lng < 0 && Math.abs(incident?.coordinates?.lng) > 80)
+    );
+    if (isRealSAR) {
+      map.setView([incident.coordinates.lat, incident.coordinates.lng], 15);
+    } else {
+      map.setView([incident.coordinates.lat, incident.coordinates.lng], 10);
+    }
+  }, [incident?.coordinates?.lat, incident?.coordinates?.lng, incident?.source_scene_id]);
 
   // Update Map Layers & Overlays based on state & activeLayers
   useEffect(() => {
@@ -83,6 +98,10 @@ export default function MaritimeMap({
     if (!map) return;
 
     const layers = layersRef.current;
+    const isRealSAR = Boolean(
+      incident?.source_scene_id?.startsWith('REAL-SAR') ||
+      (incident?.coordinates?.lng < 0 && Math.abs(incident?.coordinates?.lng) > 80)
+    );
 
     // 1. Oil Slick Polygon
     if (layers.slickLayer) {
@@ -91,18 +110,9 @@ export default function MaritimeMap({
     }
 
     if (activeLayers.sarSlicks !== false) {
-      let slickCoords = [
-        [14.8850, 88.1920],
-        [14.8980, 88.2450],
-        [14.8620, 88.3580],
-        [14.8120, 88.3980],
-        [14.7750, 88.3450],
-        [14.7920, 88.2410],
-        [14.8350, 88.1850]
-      ];
-
       // Convert dynamic backend GeoJSON geometry if available
       const rawGeom = incident?.geometry || incident?.slick_polygon || incident?.slick_detections?.[0]?.geometry;
+      let slickCoords = null;
       if (rawGeom) {
         const converted = geoJsonToLeaflet(rawGeom);
         if (converted && Array.isArray(converted) && converted.length > 0) {
@@ -110,24 +120,56 @@ export default function MaritimeMap({
         }
       }
 
-      const slickPolygon = L.polygon(slickCoords, {
-        color: '#ba1a1a', // Error red
-        weight: 2,
-        fillColor: '#93000a',
-        fillOpacity: 0.45,
-        dashArray: '4, 4'
-      }).addTo(map);
+      // If no dynamic geometry and it is the legacy fixture incident in Bay of Bengal, use fixture polygon
+      if (!slickCoords && !isRealSAR) {
+        slickCoords = [
+          [14.8850, 88.1920],
+          [14.8980, 88.2450],
+          [14.8620, 88.3580],
+          [14.8120, 88.3980],
+          [14.7750, 88.3450],
+          [14.7920, 88.2410],
+          [14.8350, 88.1850]
+        ];
+      }
 
-      slickPolygon.bindTooltip(
-        `<strong>Incident ${incident?.id || 'INC-2026-001'}</strong><br/>${incident?.sensor || 'Sentinel-1A C-SAR'} Hydrocarbon Discharge<br/>Area: ${incident?.slickDimensions?.areaKm2 || '46.8'} km² | Confidence: 94%`,
-        { sticky: true, className: 'leaflet-tactical-tooltip' }
-      );
+      if (slickCoords) {
+        const slickPolygon = L.polygon(slickCoords, {
+          color: '#ba1a1a', // Error red
+          weight: 2.5,
+          fillColor: '#93000a',
+          fillOpacity: 0.5,
+          dashArray: '4, 4'
+        }).addTo(map);
 
-      slickPolygon.on('click', () => {
-        if (onSlickClick) onSlickClick();
-      });
+        if (isRealSAR) {
+          const polyBounds = slickPolygon.getBounds();
+          if (polyBounds.isValid()) {
+            map.fitBounds(polyBounds, {
+              maxZoom: 16,
+              padding: [60, 60]
+            });
+          }
+        }
 
-      layers.slickLayer = slickPolygon;
+        const areaStr = incident?.slickDimensions?.areaKm2 || (incident?.area_km2 ? incident.area_km2.toFixed(1) : '19.5');
+        const confStr = incident?.confidence ? `${incident.confidence}%` : '99.98%';
+
+        slickPolygon.bindTooltip(
+          `<strong>${incident?.name || incident?.title || 'Incident ' + (incident?.id || '')}</strong><br/>${incident?.sensor || 'Sentinel-1A'} Hydrocarbon Discharge<br/>Area: ${areaStr} km² | Confidence: ${confStr}`,
+          { sticky: true, className: 'leaflet-tactical-tooltip' }
+        );
+
+        slickPolygon.on('click', () => {
+          if (onSlickClick) {
+            onSlickClick();
+          } else {
+            alert(`Oil Spill Detection: ${areaStr} km² area, Confidence: ${confStr}`);
+          }
+        });
+
+        layers.slickLayer = slickPolygon;
+      }
     }
 
     // 2. EEZ Maritime Boundary
@@ -135,7 +177,7 @@ export default function MaritimeMap({
       map.removeLayer(layers.eezLayer);
       layers.eezLayer = null;
     }
-    if (activeLayers.eezBoundaries !== false) {
+    if (activeLayers.eezBoundaries !== false && !isRealSAR) {
       const eezCoords = [
         [16.5000, 86.0000],
         [15.8000, 87.5000],
@@ -157,7 +199,7 @@ export default function MaritimeMap({
       map.removeLayer(layers.shippingLaneLayer);
       layers.shippingLaneLayer = null;
     }
-    if (activeLayers.shippingLanes !== false) {
+    if (activeLayers.shippingLanes !== false && !isRealSAR) {
       const laneCoords = [
         [14.5000, 86.5000],
         [14.7500, 88.0000],
@@ -178,7 +220,7 @@ export default function MaritimeMap({
     layers.vesselTrackLayers.forEach(l => map.removeLayer(l));
     layers.vesselTrackLayers = [];
 
-    if (activeLayers.vesselTracks !== false) {
+    if (activeLayers.vesselTracks !== false && !isRealSAR) {
       // MSC Ocean Star Trajectory (Primary Suspect - Cyan)
       const mscTrajectory = [
         [14.6210, 87.9120],
@@ -239,6 +281,22 @@ export default function MaritimeMap({
         </div>
       `);
       layers.vesselTrackLayers.push(epicenterMarker);
+    } else if (activeLayers.vesselTracks !== false && isRealSAR && incident?.coordinates) {
+      // Real SAR Epicenter Marker (subtle dot so it does not obscure the slick polygon)
+      const anomalyIcon = L.divIcon({
+        className: 'custom-anomaly-icon',
+        html: `
+          <div class="relative flex items-center justify-center pointer-events-none opacity-80">
+            <div class="w-3.5 h-3.5 rounded-full bg-error/25 absolute"></div>
+            <div class="w-2 h-2 rounded-full bg-error border border-white shadow-sm"></div>
+          </div>
+        `,
+        iconSize: [16, 16],
+        iconAnchor: [8, 8]
+      });
+      const epicenterMarker = L.marker([incident.coordinates.lat, incident.coordinates.lng], { icon: anomalyIcon }).addTo(map);
+      epicenterMarker.bindTooltip(`<strong>${incident.title || incident.name}</strong><br/>Lat: ${incident.coordinates.lat}°N, Lon: ${Math.abs(incident.coordinates.lng)}°W`, { sticky: true });
+      layers.vesselTrackLayers.push(epicenterMarker);
     }
 
     // 5. Animated Position Marker for Temporal Playback
@@ -247,44 +305,49 @@ export default function MaritimeMap({
       layers.animatedVesselMarker = null;
     }
 
-    const mscTrajectory = [
-      [14.6210, 87.9120],
-      [14.7140, 88.0850],
-      [14.7820, 88.2140],
-      [14.8214, 88.2915],
-      [14.8490, 88.3420],
-      [14.8910, 88.3980],
-      [14.9542, 88.4218]
-    ];
+    if (!isRealSAR) {
+      const mscTrajectory = [
+        [14.6210, 87.9120],
+        [14.7140, 88.0850],
+        [14.7820, 88.2140],
+        [14.8214, 88.2915],
+        [14.8490, 88.3420],
+        [14.8910, 88.3980],
+        [14.9542, 88.4218]
+      ];
 
-    const currentPos = mscTrajectory[Math.min(currentTimeIndex, mscTrajectory.length - 1)];
+      const currentPos = mscTrajectory[Math.min(currentTimeIndex, mscTrajectory.length - 1)];
 
-    const vesselShipIcon = L.divIcon({
-      className: 'custom-vessel-ship-icon',
-      html: `
-        <div class="relative flex items-center justify-center cursor-pointer group">
-          <div class="w-8 h-8 rounded-full bg-secondary/30 border border-secondary flex items-center justify-center text-secondary shadow-lg">
-            <svg class="w-4 h-4 transform rotate-45" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 2L4 21l8-4 8 4L12 2z"/>
-            </svg>
+      const vesselShipIcon = L.divIcon({
+        className: 'custom-vessel-ship-icon',
+        html: `
+          <div class="relative flex items-center justify-center cursor-pointer group">
+            <div class="w-8 h-8 rounded-full bg-secondary/30 border border-secondary flex items-center justify-center text-secondary shadow-lg">
+              <svg class="w-4 h-4 transform rotate-45" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2L4 21l8-4 8 4L12 2z"/>
+              </svg>
+            </div>
+            <div class="absolute -top-8 px-2 py-0.5 bg-primary text-on-primary text-[10px] font-bold rounded whitespace-nowrap opacity-90 shadow-md">
+              MSC Ocean Star (6.1 kts)
+            </div>
           </div>
-          <div class="absolute -top-8 px-2 py-0.5 bg-primary text-on-primary text-[10px] font-bold rounded whitespace-nowrap opacity-90 shadow-md">
-            MSC Ocean Star (6.1 kts)
-          </div>
-        </div>
-      `,
-      iconSize: [32, 32],
-      iconAnchor: [16, 16]
-    });
+        `,
+        iconSize: [32, 32],
+        iconAnchor: [16, 16]
+      });
 
-    const vesselMarker = L.marker(currentPos, { icon: vesselShipIcon }).addTo(map);
-    vesselMarker.on('click', () => {
-      if (onVesselClick) onVesselClick('MSC Ocean Star');
-    });
+      const vesselMarker = L.marker(currentPos, { icon: vesselShipIcon }).addTo(map);
+      vesselMarker.on('click', () => {
+        if (onVesselClick) onVesselClick('MSC Ocean Star');
+      });
 
-    layers.animatedVesselMarker = vesselMarker;
+      layers.animatedVesselMarker = vesselMarker;
+    }
 
-  }, [activeLayers, currentTimeIndex]);
+    if (layers.slickLayer) {
+      layers.slickLayer.bringToFront();
+    }
+  }, [activeLayers, currentTimeIndex, incident]);
 
   return (
     <div className="relative w-full h-full min-h-[500px] overflow-hidden rounded-lg border border-outline-variant bg-[#0b1426]">

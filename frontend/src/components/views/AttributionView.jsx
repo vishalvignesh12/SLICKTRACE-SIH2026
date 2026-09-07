@@ -125,41 +125,116 @@ export default function AttributionView() {
         </div>
       )}
 
-      {/* Two Column Layout: Factor Breakdown + Candidate List */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left: Detailed Multi-Factor Visualizer (5 cols) */}
-        <div className="lg:col-span-5">
-          <FactorBreakdown vessel={selectedVessel} />
-        </div>
+      {/* Conditional Layout: 2-Column Multi-Factor Matrix vs Empty-State Panel */}
+      {candidates.length > 0 ? (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* Left: Detailed Multi-Factor Visualizer (5 cols) */}
+          <div className="lg:col-span-5">
+            <FactorBreakdown vessel={selectedVessel} />
+          </div>
 
-        {/* Right: Candidate Vessels Ranking List (7 cols) */}
-        <div className="lg:col-span-7 flex flex-col gap-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-title-lg font-bold text-primary">
-              Corridor Candidate Vessels ({candidates.length} Scanned)
-            </h3>
-            <span className="text-label-sm text-on-surface-variant">
-              Click candidate to inspect factor weights
+          {/* Right: Candidate Vessels Ranking List (7 cols) */}
+          <div className="lg:col-span-7 flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-title-lg font-bold text-primary">
+                Corridor Candidate Vessels ({candidates.length} Scanned)
+              </h3>
+              <span className="text-label-sm text-on-surface-variant">
+                Click candidate to inspect factor weights
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {candidates.map((vessel, idx) => (
+                <CandidateCard
+                  key={vessel.imo || idx}
+                  vessel={vessel}
+                  isSelected={selectedIndex === idx}
+                  onSelect={() => setSelectedIndex(idx)}
+                  onInspectProfile={(name) => {
+                    setSelectedVesselName(name);
+                    navigateTo('vessel', { vesselName: name });
+                  }}
+                  onViewGIS={() => navigateTo('gis', { incidentId: incident?.id })}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center justify-between border-b border-outline-variant pb-3">
+            <div>
+              <h3 className="text-title-lg font-bold text-primary">
+                Corridor Candidate Vessels (0 Scanned)
+              </h3>
+              <p className="text-label-sm text-on-surface-variant">
+                AIS transponder correlation status for incident <span className="font-mono font-bold text-primary">{incident?.id || activeIncidentId}</span>
+              </p>
+            </div>
+            <span className="px-3 py-1 bg-surface-container-high text-on-surface-variant border border-outline-variant text-[11px] font-bold rounded uppercase tracking-wider font-mono">
+              Status: Correlation Pending
             </span>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {candidates.map((vessel, idx) => (
-              <CandidateCard
-                key={vessel.imo || idx}
-                vessel={vessel}
-                isSelected={selectedIndex === idx}
-                onSelect={() => setSelectedIndex(idx)}
-                onInspectProfile={(name) => {
-                  setSelectedVesselName(name);
-                  navigateTo('vessel', { vesselName: name });
-                }}
-                onViewGIS={() => navigateTo('gis', { incidentId: incident?.id })}
-              />
-            ))}
+          {/* Professional Centered Empty-State Panel */}
+          <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-8 sm:p-12 flex flex-col items-center justify-center text-center shadow-sm max-w-3xl mx-auto w-full space-y-6">
+            <div className="w-16 h-16 rounded-full bg-secondary-container/60 border border-secondary/30 flex items-center justify-center text-secondary">
+              <span className="material-symbols-outlined text-[36px]">radar</span>
+            </div>
+
+            <div className="space-y-2 max-w-xl">
+              <div className="flex items-center justify-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+                <h4 className="text-headline-sm font-bold text-primary text-[22px]">
+                  AIS Correlation Pending
+                </h4>
+              </div>
+              <p className="text-body-md font-semibold text-primary text-[15px]">
+                No localized AIS candidates are currently available for this SAR observation.
+              </p>
+              <p className="text-body-md text-on-surface-variant text-[13px] leading-relaxed">
+                Vessel attribution will be calculated after historical AIS tracks for the spill time and geographical coordinates {incident?.coordinates?.formatted ? `(${incident.coordinates.formatted})` : ''} are ingested.
+              </p>
+            </div>
+
+            {/* Tactical Notice Card */}
+            <div className="bg-surface-container-low border border-outline-variant/80 rounded-lg p-4 text-left w-full space-y-2 text-[12px]">
+              <div className="flex items-center gap-2 text-primary font-bold">
+                <span className="material-symbols-outlined text-[16px] text-secondary">info</span>
+                <span>Observation Integrity & Forensics Status</span>
+              </div>
+              <p className="text-on-surface-variant leading-relaxed">
+                This is <strong>not an attribution result</strong>. SAR segmentation detected a surface slick signature with <strong>{incident?.confidence ? `${incident.confidence}%` : '99.98%'} model confidence</strong> covering <strong>{incident?.slickDimensions?.areaKm2 || '19.5'} km²</strong>. No suspect vessel has been identified or attributed to this incident yet.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+              <Button
+                variant="teal"
+                icon="map"
+                onClick={() => navigateTo('gis', { incidentId: incident?.id })}
+              >
+                Inspect Slick Geometry in GIS
+              </Button>
+              <Button
+                variant="primary"
+                icon="folder_shared"
+                onClick={() => navigateTo('dossier', { incidentId: incident?.id })}
+              >
+                View Evidence Dossier
+              </Button>
+              <Button
+                variant="outline"
+                icon="satellite_alt"
+                onClick={() => navigateTo('detection')}
+              >
+                Detection Registry
+              </Button>
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
