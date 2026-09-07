@@ -47,12 +47,12 @@ logger = logging.getLogger("oil-spill")
 
 def log_inference(
     service_name: str,
-    model_name: str,
-    model_version: str,
-    analysis_id: str,
-    incident_id: str,
-    latency_ms: float,
-    status_code: int,
+    model_name: str = "ml-model",
+    model_version: str = "v1.0",
+    analysis_id: str = "",
+    incident_id: str = "",
+    latency_ms: float = 0,
+    status_code: int = 200,
     message: str = "Inference completed"
 ):
     """Log structured intelligence service metadata."""
@@ -62,6 +62,7 @@ def log_inference(
             "service_name": service_name,
             "model_name": model_name,
             "model_version": model_version,
+            "analysis_id": analysis_id,
             "incident_id": incident_id,
             "latency_ms": latency_ms,
             "status_code": status_code

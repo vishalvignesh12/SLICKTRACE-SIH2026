@@ -5,12 +5,12 @@ Handles ML model invocation, timeout handling, and conversion to internal format
 import time
 import asyncio
 from typing import Dict, Any
-from uuid import UUID
+from uuid import UUID, uuid4
 from datetime import datetime, UTC
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.integrations.ml import MLInferenceProvider, FixtureMLProvider, RESTMLProvider
+from app.integrations.ml import MLInferenceProvider, FixtureMLProvider, RESTMLProvider, get_ml_provider
 from app.models.satellite_scene import SatelliteScene
 from app.models.incident import Incident
 from app.models.slick_detection import SlickDetection
@@ -20,27 +20,6 @@ from app.core.logging import log_inference
 from app.services.geospatial_service import GeospatialService
 from geoalchemy2.shape import from_shape
 from shapely.geometry import shape
-
-
-async def get_ml_provider() -> MLInferenceProvider:
-    """
-    Factory function to get the configured ML provider.
-
-    Returns:
-        Configured MLInferenceProvider instance
-    """
-    provider_type = settings.ML_PROVIDER.lower()
-
-    if provider_type == "fixture":
-        return FixtureMLProvider()
-    elif provider_type == "rest":
-        return RESTMLProvider(
-            service_url=settings.ML_SERVICE_URL,
-            timeout_seconds=settings.ML_INFERENCE_TIMEOUT_SECONDS
-        )
-    else:
-        # Default to fixture for safety
-        return FixtureMLProvider()
 
 
 def validate_ml_prediction(prediction: Dict[str, Any]) -> None:
@@ -128,8 +107,9 @@ def convert_ml_to_detection_format(
 
     # Convert to format expected by detection service
     # This creates a single spill region matching the overall detection
+    unique_suffix = uuid4().hex[:8].upper()
     converted = {
-        "analysis_id": f"ANL_{hash(scene.scene_id) % 10000:04d}",
+        "analysis_id": f"ANL_{unique_suffix}",
         "scene_id": scene.scene_id,
         "status": "COMPLETED",
         "oil_spill_detected": ml_prediction["detected"],
@@ -144,7 +124,7 @@ def convert_ml_to_detection_format(
         "age_confidence": ml_prediction.get("age_confidence"),
         "spill_regions": [
             {
-                "region_id": f"region_{abs(hash(scene.scene_id)) % 100000000:08x}",
+                "region_id": f"region_{unique_suffix.lower()}",
                 "confidence": float(ml_prediction["confidence"]),
                 "area_m2": float(ml_prediction["area_km2"]) * 1_000_000,  # Convert km2 to m2
                 "centroid": {
@@ -211,7 +191,7 @@ async def process_ml_inference(
     start_time = time.time()
 
     # Get ML provider
-    provider = await get_ml_provider()
+    provider = get_ml_provider()
 
     # Invoke ML inference with timeout
     try:

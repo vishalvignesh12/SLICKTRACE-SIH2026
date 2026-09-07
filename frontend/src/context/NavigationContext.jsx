@@ -5,9 +5,9 @@ const NavigationContext = createContext();
 
 export function NavigationProvider({ children }) {
   // Screens: 'dashboard' | 'detection' | 'gis' | 'attribution' | 'vessel' | 'dossier' | 'alerts' | 'reports' | 'settings' | 'login'
-  const [activeScreen, setActiveScreen] = useState('login');
-  const [activeIncidentId, setActiveIncidentId] = useState('INC-2026-001');
-  const [selectedVesselName, setSelectedVesselName] = useState('MSC Ocean Star');
+  const [activeScreen, setActiveScreen] = useState(() => sessionStorage.getItem('active_screen') || 'login');
+  const [activeIncidentId, setActiveIncidentId] = useState(() => sessionStorage.getItem('active_incident_id') || 'INC-2026-001');
+  const [selectedVesselName, setSelectedVesselName] = useState(() => sessionStorage.getItem('selected_vessel_name') || 'MSC Ocean Star');
   const [searchQuery, setSearchQuery] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState(null);
@@ -24,6 +24,7 @@ export function NavigationProvider({ children }) {
           setIsAuthenticated(false);
           setUser(null);
           setActiveScreen('login');
+          sessionStorage.removeItem('active_screen');
           setAuthLoading(false);
         }
         return;
@@ -34,7 +35,8 @@ export function NavigationProvider({ children }) {
         if (isMounted) {
           setUser(me);
           setIsAuthenticated(true);
-          setActiveScreen('dashboard');
+          const savedScreen = sessionStorage.getItem('active_screen');
+          setActiveScreen(savedScreen && savedScreen !== 'login' ? savedScreen : 'dashboard');
         }
       } catch (err) {
         console.warn('Persisted auth token validation failed:', err);
@@ -43,6 +45,7 @@ export function NavigationProvider({ children }) {
           setUser(null);
           setIsAuthenticated(false);
           setActiveScreen('login');
+          sessionStorage.removeItem('active_screen');
         }
       } finally {
         if (isMounted) {
@@ -59,6 +62,7 @@ export function NavigationProvider({ children }) {
         setUser(null);
         setIsAuthenticated(false);
         setActiveScreen('login');
+        sessionStorage.removeItem('active_screen');
       }
     };
 
@@ -70,9 +74,16 @@ export function NavigationProvider({ children }) {
   }, []);
 
   const navigateTo = (screen, params = {}) => {
-    if (params.incidentId) setActiveIncidentId(params.incidentId);
-    if (params.vesselName) setSelectedVesselName(params.vesselName);
+    if (params.incidentId) {
+      setActiveIncidentId(params.incidentId);
+      sessionStorage.setItem('active_incident_id', params.incidentId);
+    }
+    if (params.vesselName) {
+      setSelectedVesselName(params.vesselName);
+      sessionStorage.setItem('selected_vessel_name', params.vesselName);
+    }
     setActiveScreen(screen);
+    sessionStorage.setItem('active_screen', screen);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -81,6 +92,9 @@ export function NavigationProvider({ children }) {
     setUser(null);
     setIsAuthenticated(false);
     setActiveScreen('login');
+    sessionStorage.removeItem('active_screen');
+    sessionStorage.removeItem('active_incident_id');
+    sessionStorage.removeItem('selected_vessel_name');
   };
 
   return (

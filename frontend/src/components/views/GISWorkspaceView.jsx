@@ -127,7 +127,7 @@ export default function GISWorkspaceView() {
 
           {/* Bottom: Temporal Playback Slider */}
           <TemporalPlayback
-            timelinePoints={vesselProfileMSC.aisTrajectory}
+            timelinePoints={candidateVessels?.[0]?.aisTrack || vesselProfileMSC.aisTrajectory}
             currentIndex={currentTimeIndex}
             onChangeIndex={setCurrentTimeIndex}
           />

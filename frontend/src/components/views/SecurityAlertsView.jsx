@@ -64,11 +64,16 @@ export default function SecurityAlertsView() {
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-headline-lg font-bold text-primary tracking-tight">
-            Security & Reconnaissance Alerts
-          </h1>
+          <div className="flex items-center gap-3 flex-wrap mb-1">
+            <h1 className="text-headline-lg font-bold text-primary tracking-tight">
+              Security &amp; Reconnaissance Alerts
+            </h1>
+            <span className="px-2 py-0.5 bg-amber-100 text-amber-800 border border-amber-300 text-[10px] font-bold uppercase tracking-wider rounded font-mono">
+              FIXTURE DATA — AIS/SAR Real Integration Pending
+            </span>
+          </div>
           <p className="text-body-md text-on-surface-variant">
-            Live stream of synthetic aperture radar detections, AIS transponder dark events, and attribution updates.
+            Synthetic aperture radar detection events, AIS transponder dark events, and attribution updates. Alerts are seeded from fixture data while real SAR/AIS integration is pending.
           </p>
         </div>
 
