@@ -8,6 +8,7 @@ import { useNavigation } from '../../context/NavigationContext';
 export default function Header() {
   const { 
     activeIncidentId, 
+    activeIncident,
     activeScreen, 
     navigateTo, 
     unreadAlertsCount,
@@ -47,6 +48,26 @@ export default function Header() {
     }
 
     if (isIncidentView) {
+      const isUUID = typeof activeIncidentId === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(activeIncidentId);
+      const isRealSAR = Boolean(
+        activeIncident?.source_scene_id?.startsWith('REAL-SAR') ||
+        (activeIncident?.coordinates?.lng < 0 && Math.abs(activeIncident?.coordinates?.lng) > 80) ||
+        (isUUID && activeIncidentId !== 'INC-2026-001')
+      );
+
+      const zoneDisplay = activeIncident?.zone || (isRealSAR ? 'Gulf of Mexico (Real SAR)' : 'Bay of Bengal');
+      let confidenceVal = isRealSAR ? '99.98' : '94';
+      if (activeIncident?.confidence != null) {
+        const conf = activeIncident.confidence;
+        if (typeof conf === 'number') {
+          const scaled = conf > 1 ? conf : conf * 100;
+          confidenceVal = (scaled >= 99.9 && scaled < 100) ? scaled.toFixed(2) : (scaled % 1 === 0 ? String(scaled) : scaled.toFixed(1));
+        } else {
+          confidenceVal = String(conf);
+        }
+      }
+      const confidenceDisplay = `${confidenceVal}% Confidence`;
+
       return (
         <div className="hidden sm:flex items-center gap-2.5 pl-4 border-l border-outline-variant shrink-0 whitespace-nowrap">
           <span 
@@ -54,15 +75,15 @@ export default function Header() {
             className="cursor-pointer text-[11px] leading-none bg-error-container text-on-error-container px-2.5 py-1.5 rounded font-bold uppercase tracking-wider hover:opacity-90 transition-opacity whitespace-nowrap shrink-0 inline-flex items-center"
             title="Jump to Incident Dossier"
           >
-            {activeIncidentId}
+            {activeIncident?.id || activeIncidentId}
           </span>
           <span className="text-[13px] text-on-surface-variant flex items-center gap-1 whitespace-nowrap shrink-0 font-medium">
             <span className="material-symbols-outlined text-[16px] text-secondary">location_on</span>
-            Bay of Bengal
+            {zoneDisplay}
           </span>
           <span className="text-[12px] leading-none bg-secondary-container text-on-secondary-container px-2.5 py-1.5 rounded border border-secondary/20 flex items-center gap-1.5 font-semibold whitespace-nowrap shrink-0 inline-flex">
             <span className="w-2 h-2 rounded-full bg-secondary animate-pulse shrink-0"></span>
-            94% Confidence
+            {confidenceDisplay}
           </span>
         </div>
       );

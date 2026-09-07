@@ -127,7 +127,9 @@ export default function DashboardView() {
         const displaySeverity = incident.severity || 'HIGH';
         const displaySensor = incident.sensor || 'Sentinel-1 C-SAR';
         const displayCoords = incident.coordinates?.formatted ||
-          (incident.location?.coordinates ? `${incident.location.coordinates[1].toFixed(4)}° N, ${incident.location.coordinates[0].toFixed(4)}° E` : '09.7200° N, 75.9800° E');
+          (incident.location?.coordinates
+            ? `${Math.abs(incident.location.coordinates[1]).toFixed(4)}° ${incident.location.coordinates[1] >= 0 ? 'N' : 'S'}, ${Math.abs(incident.location.coordinates[0]).toFixed(4)}° ${incident.location.coordinates[0] >= 0 ? 'E' : 'W'}`
+            : '09.7200° N, 75.9800° E');
         const displayTimestamp = String(incident.detectionTimestamp || incident.timestamp || new Date().toISOString()).replace('T', ' ').replace('Z', ' UTC');
         const displayArea = incident.slickDimensions?.areaKm2 || '12.4';
         const displayDrift = incident.slickDimensions?.driftVector || '142° @ 1.8 kts';

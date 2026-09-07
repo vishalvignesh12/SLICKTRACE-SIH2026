@@ -9,8 +9,9 @@ from shapely.geometry import shape
 from app.core.database import get_db
 from app.core.security import require_analyst
 from app.models.incident import Incident
+from app.models.slick_detection import SlickDetection
 from app.schemas.incident import IncidentCreate, IncidentResponse, GeoJSONPoint
-from app.services.dashboard_service import to_geojson_point
+from app.services.dashboard_service import to_geojson_point, to_geojson_polygon
 
 router = APIRouter(prefix="/incidents", tags=["Incidents"], dependencies=[Depends(require_analyst)])
 
@@ -51,8 +52,8 @@ async def get_incident(id: str, db: AsyncSession = Depends(get_db)):
     """Retrieve details for a specific incident by UUID or string name/code (protected)."""
     inc_uuid = None
     try:
-        inc_uuid = UUID(id)
-    except ValueError:
+        inc_uuid = UUID(str(id))
+    except (ValueError, TypeError, AttributeError):
         pass
 
     if inc_uuid:
@@ -65,6 +66,13 @@ async def get_incident(id: str, db: AsyncSession = Depends(get_db)):
 
     if not inc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Incident not found")
+
+    # Query linked SlickDetection if present
+    stmt_det = select(SlickDetection).where(SlickDetection.incident_id == inc.id).order_by(SlickDetection.confidence.desc())
+    res_det = await db.execute(stmt_det)
+    det = res_det.scalars().first()
+
+    slick_poly = to_geojson_polygon(det.geometry) if (det and det.geometry is not None) else None
         
     return IncidentResponse(
         id=inc.id,
@@ -74,7 +82,13 @@ async def get_incident(id: str, db: AsyncSession = Depends(get_db)):
         location=to_geojson_point(inc.location),
         status=inc.status,
         created_at=inc.created_at,
-        updated_at=inc.updated_at
+        updated_at=inc.updated_at,
+        slick_polygon=slick_poly,
+        area_km2=det.area_km2 if det else None,
+        length_km=det.length_km if det else None,
+        width_km=det.width_km if det else None,
+        confidence=det.confidence if det else None,
+        source_scene_id=det.source_scene_id if det else None,
     )
 
 @router.post("", response_model=IncidentResponse, status_code=status.HTTP_201_CREATED)

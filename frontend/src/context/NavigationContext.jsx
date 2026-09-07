@@ -7,6 +7,7 @@ export function NavigationProvider({ children }) {
   // Screens: 'dashboard' | 'detection' | 'gis' | 'attribution' | 'vessel' | 'dossier' | 'alerts' | 'reports' | 'settings' | 'login'
   const [activeScreen, setActiveScreen] = useState(() => sessionStorage.getItem('active_screen') || 'login');
   const [activeIncidentId, setActiveIncidentId] = useState(() => sessionStorage.getItem('active_incident_id') || 'INC-2026-001');
+  const [activeIncident, setActiveIncident] = useState(null);
   const [selectedVesselName, setSelectedVesselName] = useState(() => sessionStorage.getItem('selected_vessel_name') || 'MSC Ocean Star');
   const [searchQuery, setSearchQuery] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -78,6 +79,9 @@ export function NavigationProvider({ children }) {
       setActiveIncidentId(params.incidentId);
       sessionStorage.setItem('active_incident_id', params.incidentId);
     }
+    if (params.incident !== undefined) {
+      setActiveIncident(params.incident);
+    }
     if (params.vesselName) {
       setSelectedVesselName(params.vesselName);
       sessionStorage.setItem('selected_vessel_name', params.vesselName);
@@ -91,6 +95,7 @@ export function NavigationProvider({ children }) {
     api.logout();
     setUser(null);
     setIsAuthenticated(false);
+    setActiveIncident(null);
     setActiveScreen('login');
     sessionStorage.removeItem('active_screen');
     sessionStorage.removeItem('active_incident_id');
@@ -104,6 +109,8 @@ export function NavigationProvider({ children }) {
         setActiveScreen,
         activeIncidentId,
         setActiveIncidentId,
+        activeIncident,
+        setActiveIncident,
         selectedVesselName,
         setSelectedVesselName,
         searchQuery,

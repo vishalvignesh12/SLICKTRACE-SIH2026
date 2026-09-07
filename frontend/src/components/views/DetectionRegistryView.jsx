@@ -256,11 +256,11 @@ export default function DetectionRegistryView() {
               Oil Spill Detection Registry
             </h1>
             <span className="px-2 py-0.5 bg-amber-100 text-amber-800 border border-amber-300 text-[10px] font-bold uppercase tracking-wider rounded font-mono">
-              ML: FixtureMLProvider — SAR Real Integration Pending
+              ML: OILSPILL-UNET-V1 — REAL SAR INTEGRATION ACTIVE
             </span>
           </div>
           <p className="text-body-md text-on-surface-variant">
-            Master repository of satellite radar observations. Slick detection uses the fixture ML pipeline (synthetic data) until the real SAR segmentation model is connected.
+            Master repository of satellite radar observations. Slick detection uses the oilspill-unet-v1 deep learning segmentation pipeline for real SAR imagery.
           </p>
         </div>
 

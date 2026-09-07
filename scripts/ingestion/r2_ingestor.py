@@ -5,6 +5,7 @@ Polls Cloudflare R2 for new Sentinel-1 SAR images and submits them to the ingest
 
 import time
 import threading
+import os
 from typing import Any, Dict, Optional
 from config import Config
 from logger import setup_logger
@@ -32,7 +33,10 @@ class R2Ingestor:
 
         # Supported image extensions
         self.image_extensions = {'.tif', '.tiff'}
-
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+        self.storage_dir = os.path.join(project_root, "storage", "incoming")
+        os.makedirs(self.storage_dir, exist_ok=True)
+        logger.info(f"Local ML storage directory: {self.storage_dir}")
         logger.info("R2 Ingestor initialized")
 
     def _is_image_file(self, object_key: str) -> bool:
@@ -65,6 +69,20 @@ class R2Ingestor:
         else:
             # Should not happen if _is_image_file is called first
             return image_key + '.json'
+
+    def _download_image(self, object_key: str) -> str:
+        filename = os.path.basename(object_key)
+        local_path = os.path.join(self.storage_dir, filename)
+        logger.info(f"Downloading {object_key} to {local_path}")
+        image_content = self.r2_client.get_object(object_key)
+        with open(local_path, "wb") as f:
+            f.write(image_content)
+        logger.info(
+            f"Downloaded {object_key} successfully "
+            f"({len(image_content)} bytes)"
+        )
+
+        return local_path
 
     def _process_image_object(self, image_object: Dict[str, Any]) -> None:
         """
@@ -112,7 +130,11 @@ class R2Ingestor:
             metadata_str = metadata_content.decode('utf-8')
             metadata = load_metadata_file(object_key, metadata_str)
 
-            # Construct scene data for API submission
+            # Download the TIFF locally as a development cache
+            local_image_path = self._download_image(object_key)
+            public_r2_url = self.r2_client.get_public_url(object_key)
+
+            # Construct scene data for API submission - R2 is the source of truth
             scene_data = {
                 "source": "cloudflare-r2-replay",
                 "scene_id": metadata.scene_id,
@@ -123,7 +145,7 @@ class R2Ingestor:
                 "acquisition_time": metadata.acquisition_time.isoformat(),
                 "processing_time": metadata.processing_time.isoformat() if metadata.processing_time else None,
                 "bbox": metadata.bbox,
-                "image_url": self.r2_client.get_public_url(object_key),
+                "image_url": public_r2_url or f"storage://incoming/{os.path.basename(local_image_path)}",
                 "thumbnail_url": None,  # Could be derived from metadata if available
                 "scene_metadata": metadata.scene_metadata or {},
                 "status": "RECEIVED"

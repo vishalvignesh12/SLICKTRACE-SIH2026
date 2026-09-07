@@ -25,6 +25,8 @@ async def list_detections(db: AsyncSession = Depends(get_db)):
     return [
         DetectionResponse(
             detection_id=d.id,
+            incident_id=d.incident_id,
+            source_scene_id=d.source_scene_id,
             slick_polygon=to_geojson_polygon(d.geometry),
             area_km2=d.area_km2,
             length_km=d.length_km,
@@ -42,6 +44,8 @@ async def analyze(req: AnalyzeRequest, db: AsyncSession = Depends(get_db)):
     slick = await analyze_slick(db, req)
     return DetectionResponse(
         detection_id=slick.id,
+        incident_id=slick.incident_id,
+        source_scene_id=slick.source_scene_id,
         slick_polygon=to_geojson_polygon(slick.geometry),
         area_km2=slick.area_km2,
         length_km=slick.length_km,
@@ -65,6 +69,8 @@ async def get_detection_by_analysis(analysis_id: str, db: AsyncSession = Depends
 
     return DetectionResponse(
         detection_id=detection.id,
+        incident_id=detection.incident_id,
+        source_scene_id=detection.source_scene_id,
         slick_polygon=to_geojson_polygon(detection.geometry),
         area_km2=detection.area_km2,
         length_km=detection.length_km,
@@ -96,6 +102,8 @@ async def get_detections_by_scene(scene_id: str, db: AsyncSession = Depends(get_
     return [
         DetectionResponse(
             detection_id=d.id,
+            incident_id=d.incident_id,
+            source_scene_id=d.source_scene_id,
             slick_polygon=to_geojson_polygon(d.geometry),
             area_km2=d.area_km2,
             length_km=d.length_km,
@@ -120,6 +128,8 @@ async def get_detection(detection_id: UUID, db: AsyncSession = Depends(get_db)):
 
     return DetectionResponse(
         detection_id=detection.id,
+        incident_id=detection.incident_id,
+        source_scene_id=detection.source_scene_id,
         slick_polygon=to_geojson_polygon(detection.geometry),
         area_km2=detection.area_km2,
         length_km=detection.length_km,

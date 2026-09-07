@@ -8,7 +8,7 @@ import TelemetrySidebar from '../gis/TelemetrySidebar';
 import { vesselProfileMSC } from '../../services/mockData';
 
 export default function GISWorkspaceView() {
-  const { activeIncidentId, navigateTo } = useNavigation();
+  const { activeIncidentId, setActiveIncident, navigateTo } = useNavigation();
   const [incident, setIncident] = useState(null);
   const [candidateVessels, setCandidateVessels] = useState([]);
   const [cursorCoords, setCursorCoords] = useState(null);
@@ -29,6 +29,9 @@ export default function GISWorkspaceView() {
           api.getAttributedVessels(activeIncidentId)
         ]);
         setIncident(inc);
+        if (setActiveIncident) {
+          setActiveIncident(inc);
+        }
         setCandidateVessels(vessels);
       } catch (err) {
         console.error('Error loading GIS workspace data:', err);
@@ -37,7 +40,7 @@ export default function GISWorkspaceView() {
       }
     }
     loadWorkspaceData();
-  }, [activeIncidentId]);
+  }, [activeIncidentId, setActiveIncident]);
 
   const handleToggleLayer = (layerId) => {
     setActiveLayers(prev => ({
@@ -77,7 +80,7 @@ export default function GISWorkspaceView() {
               </span>
             </div>
             <p className="text-label-sm text-on-surface-variant">
-              Bay of Bengal Sector 4 • Satellite SAR Slick Polygon & AIS Back-Trajectory Analysis
+              {incident?.zone || (incident?.coordinates?.lng < 0 ? 'Gulf of Mexico (Real SAR)' : 'Bay of Bengal Sector 4')} • Satellite SAR Slick Polygon & AIS Back-Trajectory Analysis
             </p>
           </div>
         </div>
@@ -88,7 +91,11 @@ export default function GISWorkspaceView() {
             className="px-3.5 py-1.5 bg-secondary-container text-on-secondary-container border border-secondary/30 rounded text-label-sm font-bold hover:bg-secondary/20 transition-colors flex items-center gap-1.5 whitespace-nowrap shrink-0"
           >
             <span className="material-symbols-outlined text-[16px]">fingerprint</span>
-            Attribution Matrix (94%)
+            {candidateVessels && candidateVessels.length > 0 && candidateVessels[0]?.confidence && candidateVessels[0]?.name !== 'Pending AIS Correlation'
+              ? `Attribution Matrix (${candidateVessels[0].confidence}%)`
+              : (incident?.source_scene_id?.startsWith('REAL-SAR') || (incident?.coordinates?.lng < 0 && Math.abs(incident?.coordinates?.lng) > 80)
+                  ? 'Attribution Matrix (AIS Pending)'
+                  : 'Attribution Matrix (94%)')}
           </button>
           <button
             onClick={() => navigateTo('dossier', { incidentId: incident?.id })}
@@ -119,6 +126,7 @@ export default function GISWorkspaceView() {
             {/* Floating Quick Layer Toggle */}
             <div className="absolute top-4 left-4 z-[400] max-w-xs hidden sm:block">
               <LayerControls
+                incident={incident}
                 activeLayers={activeLayers}
                 onToggleLayer={handleToggleLayer}
               />

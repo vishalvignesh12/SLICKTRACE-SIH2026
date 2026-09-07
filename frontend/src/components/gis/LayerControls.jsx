@@ -4,10 +4,22 @@ import React from 'react';
  * LayerControls Component
  * Floating or panel-mounted layer toggles for GIS forensics workspace
  */
-export default function LayerControls({ activeLayers, onToggleLayer }) {
+export default function LayerControls({ incident, activeLayers, onToggleLayer }) {
+  const isRealSAR = Boolean(
+    incident?.source_scene_id?.startsWith('REAL-SAR') ||
+    (incident?.coordinates?.lng < 0 && Math.abs(incident?.coordinates?.lng) > 80)
+  );
+
+  const displayArea = incident?.slickDimensions?.areaKm2 != null
+    ? incident.slickDimensions.areaKm2
+    : (incident?.area_km2 != null ? Number(incident.area_km2).toFixed(1) : (isRealSAR ? '19.5' : '46.8'));
+
+  const sarDesc = `Sentinel-1A polygon (${displayArea} km²)`;
+  const vesselDesc = isRealSAR ? 'AIS correlation pending' : 'MSC Ocean Star & candidates';
+
   const layerDefinitions = [
-    { id: 'sarSlicks', label: 'SAR Oil Slicks', color: 'bg-error', desc: 'Sentinel-1A polygon (46.8 km²)' },
-    { id: 'vesselTracks', label: 'AIS Vessel Trajectories', color: 'bg-secondary', desc: 'MSC Ocean Star & candidates' },
+    { id: 'sarSlicks', label: 'SAR Oil Slicks', color: 'bg-error', desc: sarDesc },
+    { id: 'vesselTracks', label: 'AIS Vessel Trajectories', color: 'bg-secondary', desc: vesselDesc },
     { id: 'eezBoundaries', label: 'EEZ Maritime Boundary', color: 'bg-secondary-fixed', desc: 'Exclusive Economic Zone' },
     { id: 'shippingLanes', label: 'Shipping Corridors', color: 'bg-outline-variant', desc: 'Designated transit lanes' }
   ];

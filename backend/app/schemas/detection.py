@@ -13,6 +13,8 @@ class DetectionResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     detection_id: UUID
+    incident_id: Optional[UUID] = None
+    source_scene_id: Optional[str] = None
     slick_polygon: GeoJSONPolygon
     area_km2: float
     length_km: Optional[float] = None
