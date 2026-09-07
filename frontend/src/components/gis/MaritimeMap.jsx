@@ -43,9 +43,16 @@ export default function MaritimeMap({
     });
 
     // Dark Tactical Nautical Tile Layer (CartoDB Dark Matter)
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    // CARTO now requires an API key on all tile requests (enforced 2025–2026).
+    // VITE_CARTO_API_KEY is read from .env and injected by Vite at build time.
+    const cartoKey = import.meta.env.VITE_CARTO_API_KEY || '';
+    const tileUrl = cartoKey
+      ? `https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?key=${cartoKey}`
+      : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+    L.tileLayer(tileUrl, {
       maxZoom: 19,
       subdomains: 'abcd',
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, &copy; <a href="https://carto.com/attributions">CARTO</a>',
     }).addTo(map);
 
     // Custom Zoom Control at Bottom Right

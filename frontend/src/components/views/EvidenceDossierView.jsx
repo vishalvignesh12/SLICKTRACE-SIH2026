@@ -40,6 +40,19 @@ export default function EvidenceDossierView() {
     );
   }
 
+  const displayId = String(incident.id || 'INC-2026-001');
+  const displayChainId = incident.chainOfCustodyId || 'CC-2026-0827-04';
+  const displayInvestigator = incident.assignedInvestigator || 'Cmdr. Rajesh Verma';
+  const displayCoords = incident.coordinates?.formatted ||
+    (incident.location?.coordinates ? `${incident.location.coordinates[1].toFixed(4)}° N, ${incident.location.coordinates[0].toFixed(4)}° E` : '14.8250° N, 88.2410° E');
+  const displayArea = incident.slickDimensions?.areaKm2 || '46.8';
+  const displayVolume = incident.slickDimensions?.estimatedVolumeTonnes || '420 MT';
+  const suspectName = incident.primarySuspect?.name || 'MSC Ocean Star';
+  const suspectFlag = incident.primarySuspect?.flag || 'Liberia';
+  const suspectImo = incident.primarySuspect?.imo || '9412345';
+  const suspectMmsi = incident.primarySuspect?.mmsi || '636018492';
+  const suspectVesselType = incident.primarySuspect?.vesselType || 'Crude Oil Tanker';
+
   return (
     <div className="flex flex-col gap-6 max-w-5xl mx-auto animate-in fade-in duration-150">
       {/* Top Toolbar (Hidden during print) */}
@@ -49,7 +62,7 @@ export default function EvidenceDossierView() {
             Official Incident Evidence Dossier
           </h1>
           <p className="text-label-sm text-on-surface-variant">
-            Case Reference: <strong className="font-mono text-primary">{incident.id}</strong> • Chain of Custody: <strong className="font-mono text-secondary">{incident.chainOfCustodyId}</strong>
+            Case Reference: <strong className="font-mono text-primary">{displayId}</strong> • Chain of Custody: <strong className="font-mono text-secondary">{displayChainId}</strong>
           </p>
         </div>
 
@@ -87,7 +100,7 @@ export default function EvidenceDossierView() {
                 Forensic Incident Investigation Report
               </h2>
               <div className="text-label-sm text-on-surface-variant font-mono mt-0.5">
-                Statutory Case ID: {incident.id} • Classification: RESTRICTED / LEGAL ADMISSIBLE
+                Statutory Case ID: {displayId} • Classification: RESTRICTED / LEGAL ADMISSIBLE
               </div>
             </div>
           </div>
@@ -95,7 +108,7 @@ export default function EvidenceDossierView() {
           <div className="text-left sm:text-right text-label-sm space-y-1">
             <div><strong>Date Generated:</strong> 2026-08-27</div>
             <div><strong>Investigating Unit:</strong> Sector 4 Coast Command</div>
-            <div><strong>Investigator:</strong> {incident.assignedInvestigator}</div>
+            <div><strong>Investigator:</strong> {displayInvestigator}</div>
           </div>
         </div>
 
@@ -106,21 +119,21 @@ export default function EvidenceDossierView() {
             1. Executive Incident Summary
           </h3>
           <p className="text-body-md leading-relaxed text-on-surface">
-            On <strong>2026-08-27 at 04:15 UTC</strong>, automated synthetic aperture radar (SAR) processing on the <strong>Sentinel-1A</strong> satellite pass detected a major surface hydrocarbon anomaly covering <strong>46.8 km²</strong> in international waters within Sector 4 (Bay of Bengal). Spatial-temporal back-trajectory analysis corroborates deliberate bilge discharge or catastrophic bunker leakage from crude oil tanker <strong>MSC Ocean Star</strong> (Liberia Flag, IMO 9412345) with a <strong>94% statistical confidence attribution</strong>.
+            On <strong>2026-08-27 at 04:15 UTC</strong>, automated synthetic aperture radar (SAR) processing on the <strong>Sentinel-1A</strong> satellite pass detected a major surface hydrocarbon anomaly covering <strong>{displayArea} km²</strong> in international waters within Sector 4 (Bay of Bengal). Spatial-temporal back-trajectory analysis corroborates deliberate bilge discharge or catastrophic bunker leakage from crude oil tanker <strong>{suspectName}</strong> ({suspectFlag} Flag, IMO {suspectImo}) with a <strong>94% statistical confidence attribution</strong>.
           </p>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 bg-surface-container-low rounded border border-outline-variant text-label-sm">
             <div>
               <span className="text-on-surface-variant block text-[11px]">Epicenter Coords</span>
-              <strong className="text-primary font-mono">{incident.coordinates.formatted}</strong>
+              <strong className="text-primary font-mono">{displayCoords}</strong>
             </div>
             <div>
               <span className="text-on-surface-variant block text-[11px]">Calculated Spill Area</span>
-              <strong className="text-primary font-mono">{incident.slickDimensions.areaKm2} km²</strong>
+              <strong className="text-primary font-mono">{displayArea} km²</strong>
             </div>
             <div>
               <span className="text-on-surface-variant block text-[11px]">Discharge Volume</span>
-              <strong className="text-error font-mono">{incident.slickDimensions.estimatedVolumeTonnes}</strong>
+              <strong className="text-error font-mono">{displayVolume}</strong>
             </div>
             <div>
               <span className="text-on-surface-variant block text-[11px]">Attribution Status</span>
@@ -158,19 +171,19 @@ export default function EvidenceDossierView() {
 
           <div className="p-4 bg-surface-container-high rounded border border-outline-variant space-y-3">
             <div className="flex items-center justify-between">
-              <strong className="text-title-lg text-primary">{incident.primarySuspect.name}</strong>
+              <strong className="text-title-lg text-primary">{suspectName}</strong>
               <StatusChip status="Attributed" label="Attribution: 94%" />
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-label-sm text-on-surface">
-              <div><span>Flag:</span> <strong>{incident.primarySuspect.flag}</strong></div>
-              <div><span>IMO:</span> <strong className="font-mono">{incident.primarySuspect.imo}</strong></div>
-              <div><span>MMSI:</span> <strong className="font-mono">{incident.primarySuspect.mmsi}</strong></div>
-              <div><span>Vessel Type:</span> <strong>{incident.primarySuspect.vesselType}</strong></div>
+              <div><span>Flag:</span> <strong>{suspectFlag}</strong></div>
+              <div><span>IMO:</span> <strong className="font-mono">{suspectImo}</strong></div>
+              <div><span>MMSI:</span> <strong className="font-mono">{suspectMmsi}</strong></div>
+              <div><span>Vessel Type:</span> <strong>{suspectVesselType}</strong></div>
             </div>
 
             <div className="p-3 bg-surface-container-lowest rounded border border-outline-variant text-[12px] text-on-surface leading-relaxed">
-              <strong>Forensic Telemetry Summary:</strong> At 2026-08-26 23:15 UTC, MSC Ocean Star passed within 0.8 km of the slick epicenter. The vessel's AIS log indicates a sudden drop in cruising speed from 14.2 knots to 6.1 knots lasting 42 minutes with a 25° heading deviation, coinciding with calculated discharge onset.
+              <strong>Forensic Telemetry Summary:</strong> At 2026-08-26 23:15 UTC, {suspectName} passed within 0.8 km of the slick epicenter. The vessel's AIS log indicates a sudden drop in cruising speed from 14.2 knots to 6.1 knots lasting 42 minutes with a 25° heading deviation, coinciding with calculated discharge onset.
             </div>
           </div>
         </section>
@@ -202,7 +215,7 @@ export default function EvidenceDossierView() {
           {/* Signature Block */}
           <div className="grid grid-cols-2 gap-8 pt-6">
             <div className="border-t border-on-surface/40 pt-2 text-label-sm">
-              <strong className="text-primary block">{incident.assignedInvestigator}</strong>
+              <strong className="text-primary block">{displayInvestigator}</strong>
               <span className="text-on-surface-variant">Lead Maritime Environmental Investigator</span>
             </div>
             <div className="border-t border-on-surface/40 pt-2 text-label-sm text-right">

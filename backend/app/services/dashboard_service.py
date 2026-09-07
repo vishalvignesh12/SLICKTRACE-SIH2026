@@ -1,7 +1,7 @@
 from typing import List, Optional
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_, or_, text
+from sqlalchemy import select, func, and_, or_, text, literal
 from geoalchemy2.shape import to_shape
 from shapely.geometry import mapping
 from datetime import datetime, timezone, timedelta
@@ -44,9 +44,10 @@ def to_geojson_polygon(geom) -> Optional[dict]:
     if geom is None:
         return None
     shape_obj = to_shape(geom)
+    coords = mapping(shape_obj)["coordinates"]
     return {
         "type": "Polygon",
-        "coordinates": [list(mapping(shape_obj)["coordinates"])]
+        "coordinates": [list(ring) for ring in coords]
     }
 
 
@@ -224,11 +225,11 @@ class DashboardService:
 
         # Apply filters
         filters = [SlickDetection.detected == True]  # Only show detected spills
-        if status:
+        if status and isinstance(status, str):
             filters.append(Incident.status == status)
-        if min_confidence is not None:
+        if min_confidence is not None and isinstance(min_confidence, (int, float)):
             filters.append(SlickDetection.confidence >= min_confidence)
-        if bbox and len(bbox) == 4:
+        if bbox is not None and isinstance(bbox, (list, tuple)) and len(bbox) == 4:
             # bbox format: [minx, miny, maxx, maxy] = [lon_min, lat_min, lon_max, lat_max]
             # PostGIS ST_MakeEnvelope(xmin, ymin, xmax, ymax, srid)
             bbox_geom = func.ST_MakeEnvelope(bbox[0], bbox[1], bbox[2], bbox[3], 4326)
@@ -377,7 +378,7 @@ class DashboardService:
             Incident.id,
             Incident.status,
             Incident.timestamp,
-            text("'OIL_SPILL_DETECTED'").label('event_type')
+            literal('OIL_SPILL_DETECTED').label('event_type')
         ).select_from(Incident.__table__)
 
         # Order by timestamp descending
@@ -413,38 +414,46 @@ class DashboardService:
             return None
 
         # Transform to match dashboard expected format
-        # This is a simplified version - in reality we'd map more carefully
+        inc = full_details.get("incident") if isinstance(full_details, dict) else getattr(full_details, "incident", None)
+        slick = full_details.get("slick") if isinstance(full_details, dict) else getattr(full_details, "slick", None)
+        vessels = full_details.get("vessels", []) if isinstance(full_details, dict) else getattr(full_details, "vessels", [])
+        attr_list = full_details.get("attribution", []) if isinstance(full_details, dict) else getattr(full_details, "attribution", [])
+        evidence_val = full_details.get("evidence") if isinstance(full_details, dict) else getattr(full_details, "evidence", None)
+
+        inc_dict = inc if isinstance(inc, dict) else {}
+        slick_dict = slick if isinstance(slick, dict) else {}
+
+        candidate_vessels = []
+        for idx, (v, a) in enumerate(zip(vessels, attr_list)):
+            v_dict = v if isinstance(v, dict) else {}
+            a_dict = a if isinstance(a, dict) else {}
+            score_val = a_dict.get("score", 0.0)
+            candidate_vessels.append({
+                "vessel_id": str(v_dict.get("id", "") or a_dict.get("vessel_id", "")),
+                "mmsi": v_dict.get("mmsi") or a_dict.get("mmsi"),
+                "name": v_dict.get("name") or a_dict.get("name"),
+                "rank": idx + 1,
+                "attribution_score": score_val,
+                "confidence": "HIGH" if score_val >= 0.8 else "MEDIUM" if score_val >= 0.5 else "LOW",
+                "distance_to_origin_km": 0.0,
+                "temporal_match": a_dict.get("temporality", 0.0)
+            })
+
         return InvestigationDetailResponse(
             investigation={
-                "id": str(full_details.incident.id),
-                "status": full_details.incident.status
+                "id": str(inc_dict.get("id", "")),
+                "status": str(inc_dict.get("status", "OPEN"))
             },
             detection={
-                "detected": full_details.slick is not None,
-                "confidence": full_details.slick.confidence if full_details.slick else 0.0,
-                "area_km2": full_details.slick.area_km2 if full_details.slick else 0.0
-            } if full_details.slick else {
-                "detected": False,
-                "confidence": 0.0,
-                "area_km2": 0.0
+                "detected": bool(slick_dict.get("detected", False)),
+                "confidence": float(slick_dict.get("confidence", 0.0)),
+                "area_km2": float(slick_dict.get("area_km2", 0.0))
             },
-            spill_regions=[],  # Would need to extract from spill regions
+            spill_regions=[],
             hindcast={},
             forecast={},
             ais_tracks=[],
-            candidate_vessels=[
-                {
-                    "vessel_id": str(vessel.id),
-                    "mmsi": vessel.mmsi,
-                    "name": vessel.name,
-                    "rank": idx + 1,
-                    "attribution_score": attr.score,
-                    "confidence": "HIGH" if attr.score >= 0.8 else "MEDIUM" if attr.score >= 0.5 else "LOW",
-                    "distance_to_origin_km": 0.0,  # Would calculate from actual distance
-                    "temporal_match": attr.temporality_score
-                }
-                for idx, (vessel, attr) in enumerate(zip(full_details.vessels, full_details.attribution))
-            ],
-            attribution={},  # Would need to format attribution data
-            evidence=[] if not full_details.evidence else [full_details.evidence]  # Simplified
+            candidate_vessels=candidate_vessels,
+            attribution={},
+            evidence=[evidence_val] if evidence_val else []
         )

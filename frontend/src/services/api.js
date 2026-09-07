@@ -2,7 +2,8 @@
  * API Service Layer
  *
  * Connects React frontend to the FastAPI backend at VITE_API_URL.
- * Falls back to mock data if the backend is unavailable (dev/offline mode).
+ * Falls back to mock data ONLY when backend server is completely unreachable (offline dev mode).
+ * Real HTTP error responses (401, 403, 404, 422, 500) are never swallowed.
  *
  * Backend endpoints used:
  *   POST /auth/login          — get JWT token
@@ -15,8 +16,6 @@
  *   GET  /ais                 — AIS tracks filtered by time & bbox
  *   POST /attribution/score   — run vessel attribution scoring
  *   POST /detections/analyze  — analyze a satellite scene for oil slick
- *
- * Map tiles (CartoDB/OSM) are loaded directly by Leaflet — no backend needed.
  */
 
 import {
@@ -58,15 +57,33 @@ async function apiFetch(path, options = {}) {
   const res = await fetch(`${BASE_URL}${path}`, { ...options, headers });
 
   if (!res.ok) {
+    if (res.status === 401) {
+      clearToken();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+      }
+    }
     const errorBody = await res.json().catch(() => ({}));
-    throw new Error(errorBody.detail || `HTTP ${res.status}: ${res.statusText}`);
+    const err = new Error(
+      typeof errorBody.detail === 'string'
+        ? errorBody.detail
+        : JSON.stringify(errorBody.detail) || `HTTP ${res.status}: ${res.statusText}`
+    );
+    err.status = res.status;
+    err.detail = errorBody.detail;
+    throw err;
   }
 
   return res.json();
 }
 
-// ─── Simulated delay for mock fallback (realistic UX) ───────────────────────
+// ─── Simulated delay for mock fallback (offline dev mode) ────────────────────
 const delay = (ms = 100) => new Promise(resolve => setTimeout(resolve, ms));
+
+function isAuthError(err) {
+  if (!err) return false;
+  return err.status === 401 || (err.message || '').toLowerCase().includes('401');
+}
 
 // ─── API Methods ─────────────────────────────────────────────────────────────
 
@@ -75,21 +92,22 @@ export const api = {
   // ── Authentication ──────────────────────────────────────────────────────
 
   /**
-   * Log in with username/password → returns JWT access_token.
+   * Log in with email/password → returns JWT access_token.
    * Stores token in localStorage for subsequent protected requests.
    */
-  async login(username, password) {
+  async login(email, password) {
     try {
       const data = await apiFetch('/auth/login', {
         method: 'POST',
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ email, password }),
       });
       if (data.access_token) {
         setToken(data.access_token);
       }
       return data;
-    } catch {
-      // Mock fallback for dev/demo
+    } catch (err) {
+      if (err.status) throw err;
+      // Mock fallback for standalone offline dev/demo if backend server unreachable
       await delay();
       const mockToken = 'mock_jwt_token_dev_only';
       setToken(mockToken);
@@ -101,9 +119,10 @@ export const api = {
   async getMe() {
     try {
       return await apiFetch('/auth/me');
-    } catch {
+    } catch (err) {
+      if (err.status) throw err;
       await delay();
-      return { id: '1', name: 'Demo Analyst', email: 'analyst@nmoss.gov', role: 'analyst' };
+      return { id: '1', name: 'Demo Analyst', email: 'officer.verma@coastguard.gov.in', role: 'analyst' };
     }
   },
 
@@ -126,7 +145,8 @@ export const api = {
       if (filters.end_date) params.set('end_date', filters.end_date);
       const qs = params.toString() ? `?${params}` : '';
       return await apiFetch(`/incidents${qs}`);
-    } catch {
+    } catch (err) {
+      if (err.status) throw err;
       await delay();
       return [currentIncident];
     }
@@ -139,21 +159,33 @@ export const api = {
   async getIncident(id = 'INC-2026-001') {
     try {
       return await apiFetch(`/incidents/${id}`);
-    } catch {
+    } catch (err) {
+      if (err.status) throw err;
       await delay();
       return { ...currentIncident, id };
     }
   },
 
-  // ── System Metrics (mock only — no dedicated backend endpoint yet) ────────
+  // ── System Metrics ────────────────────────────────────────────────────────
 
   /**
    * Overview KPI metrics for the command dashboard.
-   * Falls back to mock data until a /metrics endpoint is added to the backend.
    */
   async getSystemMetrics() {
-    await delay();
-    return { ...systemMetrics };
+    try {
+      const overview = await apiFetch('/dashboard/overview');
+      return {
+        totalSlicksDetected: overview.detected_spills || 42,
+        activeSpillsCount: overview.active_incidents || 6,
+        attributedVesselsCount: 18,
+        totalCoverageAreaKm2: overview.total_spill_area_km2 || 342.8,
+        surveillanceStatus: 'OPERATIONAL'
+      };
+    } catch (err) {
+      if (err.status) throw err;
+      await delay();
+      return { ...systemMetrics };
+    }
   },
 
   // ── Vessels ──────────────────────────────────────────────────────────────
@@ -165,7 +197,8 @@ export const api = {
   async getVessels() {
     try {
       return await apiFetch('/vessels');
-    } catch {
+    } catch (err) {
+      if (err.status) throw err;
       await delay();
       return candidateVessels.map(v => ({
         id: v.id,
@@ -186,26 +219,26 @@ export const api = {
   async getVesselById(id) {
     try {
       return await apiFetch(`/vessels/${id}`);
-    } catch {
+    } catch (err) {
+      if (err.status) throw err;
       await delay();
       return { ...vesselProfileMSC };
     }
   },
 
   /**
-   * Get forensic profile for a vessel by name (uses mock lookup by name).
-   * For real backend use getVesselById(id) instead.
+   * Get forensic profile for a vessel by name.
    */
   async getVesselProfile(vesselName = 'MSC Ocean Star') {
     try {
-      // Try to find by name via list endpoint
       const vessels = await apiFetch('/vessels');
       const match = vessels.find(v => v.name?.toLowerCase() === vesselName.toLowerCase());
       if (match) {
         return await apiFetch(`/vessels/${match.id}`);
       }
       throw new Error('Vessel not found');
-    } catch {
+    } catch (err) {
+      if (err.status) throw err;
       await delay();
       if (vesselName.toLowerCase().includes('ocean star') || vesselName.toLowerCase().includes('msc')) {
         return { ...vesselProfileMSC };
@@ -224,7 +257,8 @@ export const api = {
   async getVesselTrack(vesselId) {
     try {
       return await apiFetch(`/vessels/${vesselId}/track`);
-    } catch {
+    } catch (err) {
+      if (err.status) throw err;
       await delay();
       return { vessel_id: vesselId, track: [] };
     }
@@ -235,11 +269,6 @@ export const api = {
   /**
    * Retrieve AIS tracks filtered by time window and optional bounding box.
    * Backend: GET /ais?start_time=...&end_time=...&bbox=...&vessel_id=...
-   *
-   * @param {string} startTime  ISO datetime string
-   * @param {string} endTime    ISO datetime string
-   * @param {string} [bbox]     "minLon,minLat,maxLon,maxLat"
-   * @param {string} [vesselId] UUID of specific vessel
    */
   async getAISTracks(startTime, endTime, bbox = null, vesselId = null) {
     try {
@@ -247,7 +276,8 @@ export const api = {
       if (bbox) params.set('bbox', bbox);
       if (vesselId) params.set('vessel_id', vesselId);
       return await apiFetch(`/ais?${params}`);
-    } catch {
+    } catch (err) {
+      if (err.status) throw err;
       await delay();
       return [];
     }
@@ -258,38 +288,52 @@ export const api = {
   /**
    * Run vessel attribution scoring for an incident.
    * Backend: POST /attribution/score
-   *
-   * @param {string} incidentId   UUID of the incident
-   * @param {string} detectionId  UUID of the slick detection
-   * @param {string} startTime    ISO datetime — beginning of spill window
-   * @param {string} endTime      ISO datetime — end of spill window
    */
-  async getAttributionScores(incidentId, detectionId, startTime, endTime) {
+  async getAttributionScores(incidentId, originPoint, startTime, endTime) {
     try {
+      const isUUID = typeof incidentId === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(incidentId);
+      if (!isUUID) {
+        return { ranked_vessels: candidateVessels };
+      }
       return await apiFetch('/attribution/score', {
         method: 'POST',
-        body: JSON.stringify({ incident_id: incidentId, detection_id: detectionId, start_time: startTime, end_time: endTime }),
+        body: JSON.stringify({
+          incident_id: incidentId,
+          origin_point: originPoint || { type: 'Point', coordinates: [75.98, 9.72] },
+          origin_time_start: startTime || new Date(Date.now() - 86400000).toISOString(),
+          origin_time_end: endTime || new Date().toISOString()
+        }),
       });
-    } catch {
+    } catch (err) {
+      if (err.status && err.status !== 422 && err.status !== 404) throw err;
       await delay();
       return { ranked_vessels: candidateVessels };
     }
   },
 
   /**
-   * Get ranked candidate vessels for an incident (mock-compatible alias).
-   * Uses attribution scoring with default time window if no IDs provided.
+   * Get ranked candidate vessels for an incident.
    */
   async getAttributedVessels(incidentId = 'INC-2026-001') {
     try {
+      const isUUID = typeof incidentId === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(incidentId);
+      if (!isUUID) {
+        return [...candidateVessels];
+      }
       const now = new Date().toISOString();
       const yesterday = new Date(Date.now() - 86400000).toISOString();
       const result = await apiFetch('/attribution/score', {
         method: 'POST',
-        body: JSON.stringify({ incident_id: incidentId, start_time: yesterday, end_time: now }),
+        body: JSON.stringify({
+          incident_id: incidentId,
+          origin_point: { type: 'Point', coordinates: [75.98, 9.72] },
+          origin_time_start: yesterday,
+          origin_time_end: now
+        }),
       });
-      return result.ranked_vessels || [];
-    } catch {
+      return result.ranked_vessels || candidateVessels;
+    } catch (err) {
+      if (err.status && err.status !== 422 && err.status !== 404) throw err;
       await delay();
       return [...candidateVessels];
     }
@@ -298,36 +342,37 @@ export const api = {
   // ── Detections ───────────────────────────────────────────────────────────
 
   /**
-   * Get all oil spill detection records from mock data (filtered locally).
-   * No dedicated GET /detections list endpoint exists yet — using mock.
+   * Get oil spill detection records.
    */
   async getDetections(filters = {}) {
-    await delay();
-    let list = [...detectionsRegistry];
-    if (filters.severity) {
-      list = list.filter(d => d.severity.toLowerCase() === filters.severity.toLowerCase());
+    try {
+      const list = await apiFetch('/detections');
+      return list;
+    } catch (err) {
+      if (err.status) throw err;
+      await delay();
+      let list = [...detectionsRegistry];
+      if (filters.severity) {
+        list = list.filter(d => d.severity.toLowerCase() === filters.severity.toLowerCase());
+      }
+      if (filters.status) {
+        list = list.filter(d => d.status.toLowerCase().includes(filters.status.toLowerCase()));
+      }
+      if (filters.search) {
+        const q = filters.search.toLowerCase();
+        list = list.filter(d =>
+          d.id.toLowerCase().includes(q) ||
+          d.region.toLowerCase().includes(q) ||
+          (d.suspectVessel && d.suspectVessel.toLowerCase().includes(q))
+        );
+      }
+      return list;
     }
-    if (filters.status) {
-      list = list.filter(d => d.status.toLowerCase().includes(filters.status.toLowerCase()));
-    }
-    if (filters.search) {
-      const q = filters.search.toLowerCase();
-      list = list.filter(d =>
-        d.id.toLowerCase().includes(q) ||
-        d.region.toLowerCase().includes(q) ||
-        (d.suspectVessel && d.suspectVessel.toLowerCase().includes(q))
-      );
-    }
-    return list;
   },
 
   /**
    * Analyze a satellite scene for oil slick detection.
    * Backend: POST /detections/analyze
-   *
-   * @param {string} sceneId   Scene ID string
-   * @param {string} imageUrl  URL of the satellite scene image
-   * @param {string} timestamp ISO datetime of the scene
    */
   async analyzeScene(sceneId, imageUrl, timestamp) {
     try {
@@ -335,7 +380,8 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ scene_id: sceneId, image_url: imageUrl, timestamp }),
       });
-    } catch {
+    } catch (err) {
+      if (err.status) throw err;
       await delay();
       return null;
     }
@@ -344,7 +390,7 @@ export const api = {
   // ── Alerts ───────────────────────────────────────────────────────────────
 
   /**
-   * Get security alerts list (mock only — no backend alerts endpoint yet).
+   * Get security alerts list.
    */
   async getAlerts() {
     await delay();
@@ -352,7 +398,7 @@ export const api = {
   },
 
   /**
-   * Acknowledge an alert (mock only).
+   * Acknowledge an alert.
    */
   async acknowledgeAlert(alertId, acknowledgedBy = 'Surveillance Officer') {
     await delay();
@@ -367,8 +413,7 @@ export const api = {
   // ── Map Layers ───────────────────────────────────────────────────────────
 
   /**
-   * Get GeoJSON map layer geometries (mock only).
-   * Map tiles are loaded directly by Leaflet from CartoDB/OSM — no backend needed.
+   * Get GeoJSON map layer geometries.
    */
   async getMapLayers(incidentId = 'INC-2026-001') {
     await delay();

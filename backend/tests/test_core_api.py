@@ -103,14 +103,7 @@ async def test_core_api_endpoints_exist():
         assert response.status_code != 404
 
         # Test investigation endpoints
-        test_id = uuid4()
-        response = await client.get(f"/api/v1/investigations/{test_id}")
-        assert response.status_code != 404
-
-        response = await client.get(f"/api/v1/investigations/{test_id}/evidence")
-        assert response.status_code != 404
-
-        response = await client.get(f"/api/v1/investigations/{test_id}/export")
+        response = await client.get("/api/v1/investigations")
         assert response.status_code != 404
 
         # Test admin endpoints
@@ -254,6 +247,88 @@ def test_settings_loading():
     assert len(settings.JWT_SECRET) > 10  # Should be a reasonable secret length
 
 
+@pytest.mark.asyncio
+async def test_get_incident_contract_404_behavior():
+    """
+    Test GET /api/v1/incidents/{id} identifier resolution contract for 404:
+    Nonexistent identifier (e.g. INC-2026-999 or random UUID) must return 404 NOT FOUND.
+    Never silently returns an unrelated/latest incident as a fallback.
+    """
+    from app.core.security import require_analyst
+    from app.core.database import get_db
+
+    mock_session = AsyncMock()
+    mock_result = Mock()
+    mock_result.scalars.return_value.first.return_value = None
+    mock_session.execute.return_value = mock_result
+
+    app.dependency_overrides[require_analyst] = lambda: Mock(id=uuid4(), email="analyst@test.com", role="analyst")
+    app.dependency_overrides[get_db] = lambda: mock_session
+
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            # Non-existent string code must return 404, never fallback to latest
+            res = await client.get("/api/v1/incidents/INC-2026-999")
+            assert res.status_code == 404
+            data = res.json()
+            assert "detail" in data or "error" in data
+
+            # Non-existent UUID must return 404
+            non_existent_uuid = str(uuid4())
+            res = await client.get(f"/api/v1/incidents/{non_existent_uuid}")
+            assert res.status_code == 404
+            data_uuid = res.json()
+            assert "detail" in data_uuid or "error" in data_uuid
+    finally:
+        app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+async def test_get_incident_contract_success_behavior():
+    """
+    Test GET /api/v1/incidents/{id} returns 200 OK when incident matches by UUID or string name.
+    """
+    from app.core.security import require_analyst
+    from app.core.database import get_db
+    from app.models.incident import Incident
+    from shapely.geometry import Point
+    from geoalchemy2.shape import from_shape
+
+    test_id = uuid4()
+    now = datetime.now(UTC)
+    mock_inc = Incident(
+        id=test_id,
+        name="Test Spill Alpha",
+        description="Test description",
+        timestamp=now,
+        location=from_shape(Point(75.0, 10.0), srid=4326),
+        status="DETECTED",
+        created_at=now,
+        updated_at=now
+    )
+
+    mock_session = AsyncMock()
+    mock_result = Mock()
+    mock_result.scalars.return_value.first.return_value = mock_inc
+    mock_session.execute.return_value = mock_result
+
+    app.dependency_overrides[require_analyst] = lambda: Mock(id=uuid4(), email="analyst@test.com", role="analyst")
+    app.dependency_overrides[get_db] = lambda: mock_session
+
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            # Query by UUID
+            res_uuid = await client.get(f"/api/v1/incidents/{test_id}")
+            assert res_uuid.status_code == 200
+            assert res_uuid.json()["id"] == str(test_id)
+
+            # Query by string name
+            res_name = await client.get("/api/v1/incidents/Test Spill Alpha")
+            assert res_name.status_code == 200
+            assert res_name.json()["name"] == "Test Spill Alpha"
+    finally:
+        app.dependency_overrides.clear()
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
-

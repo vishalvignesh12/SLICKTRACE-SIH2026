@@ -160,8 +160,10 @@ async def process_ml_prediction(db: AsyncSession, ml_result: dict) -> SlickDetec
         await db.rollback()
         log_inference(
             service_name="detection_service",
+            model_name="ml-model",
             model_version=model_version,
             analysis_id=analysis_id,
+            incident_id="unknown",
             latency_ms=int((time.time() - start_time) * 1000),
             status_code=500,
             message=f"Database error: {str(e)}"
@@ -228,6 +230,12 @@ async def _get_or_create_scene(db: AsyncSession, scene_id: str, ml_result: dict)
             select(SatelliteScene).where(SatelliteScene.id == scene_uuid)
         )
         scene = result.scalar_one_or_none()
+
+    if not scene:
+        result = await db.execute(
+            select(SatelliteScene).where(SatelliteScene.scene_id == scene_id)
+        )
+        scene = result.scalars().first()
 
     if not scene:
         # Create new scene from ML result metadata

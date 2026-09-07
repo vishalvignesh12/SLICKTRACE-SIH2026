@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional, List
 
 from app.core.database import get_db
+from app.core.security import require_analyst
 from app.services.dashboard_service import DashboardService
 from app.schemas.dashboard import (
     DashboardOverviewResponse,
@@ -14,7 +15,7 @@ from app.schemas.dashboard import (
     InvestigationDetailResponse
 )
 
-router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
+router = APIRouter(prefix="/dashboard", tags=["Dashboard"], dependencies=[Depends(require_analyst)])
 
 
 @router.get("/overview", response_model=DashboardOverviewResponse)

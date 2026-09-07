@@ -1,17 +1,39 @@
 import React, { useState } from 'react';
 import { useNavigation } from '../../context/NavigationContext';
+import { api } from '../../services/api';
 import Button from '../common/Button';
 
 export default function LoginView() {
-  const { navigateTo, setIsAuthenticated } = useNavigation();
+  const { navigateTo, setIsAuthenticated, setUser } = useNavigation();
   const [email, setEmail] = useState('officer.verma@coastguard.gov.in');
-  const [password, setPassword] = useState('••••••••••••');
+  const [password, setPassword] = useState('SIH2026@CoastGuard');
   const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    setIsAuthenticated(true);
-    navigateTo('dashboard');
+    setError(null);
+    setLoading(true);
+    try {
+      const res = await api.login(email, password);
+      if (res && res.access_token) {
+        try {
+          const me = await api.getMe();
+          if (setUser) setUser(me);
+        } catch {
+          // ignore
+        }
+        setIsAuthenticated(true);
+        navigateTo('dashboard');
+      } else {
+        setError('Authentication failed. Please verify credentials.');
+      }
+    } catch (err) {
+      setError(err.message || 'Authentication failed. Please check your credentials.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -62,6 +84,13 @@ export default function LoginView() {
                 Sign in to access satellite-based oil spill monitoring, vessel attribution, and maritime environmental intelligence.
               </p>
             </div>
+
+            {error && (
+              <div className="mb-4 p-3.5 bg-error-container text-on-error-container rounded-lg text-label-sm font-semibold border border-error/30 flex items-center gap-2">
+                <span className="material-symbols-outlined text-[18px] text-error">error</span>
+                <span>{error}</span>
+              </div>
+            )}
 
             <form onSubmit={handleSubmit} className="flex flex-col gap-5">
               <div className="flex flex-col gap-1.5">
@@ -121,8 +150,8 @@ export default function LoginView() {
                 </a>
               </div>
 
-              <Button type="submit" size="lg" icon="lock_person" className="w-full mt-2">
-                Sign In Securely
+              <Button type="submit" size="lg" icon="lock_person" disabled={loading} className="w-full mt-2">
+                {loading ? 'Authenticating...' : 'Sign In Securely'}
               </Button>
             </form>
 

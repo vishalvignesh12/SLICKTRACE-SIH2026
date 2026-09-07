@@ -6,7 +6,7 @@ import { useNavigation } from '../../context/NavigationContext';
  * Persistent 260px fixed sidebar with logo, active indicator, icons, and status
  */
 export default function SideNavBar() {
-  const { activeScreen, navigateTo, setIsAuthenticated, unreadAlertsCount } = useNavigation();
+  const { activeScreen, navigateTo, handleLogout, unreadAlertsCount } = useNavigation();
 
   const navItems = [
     { id: 'dashboard', label: 'Command Dashboard', icon: 'dashboard' },
@@ -102,10 +102,7 @@ export default function SideNavBar() {
         </div>
 
         <button
-          onClick={() => {
-            setIsAuthenticated(false);
-            navigateTo('login');
-          }}
+          onClick={handleLogout}
           className="w-full flex items-center gap-3 px-3 py-2 rounded text-on-surface-variant hover:bg-error-container/40 hover:text-error transition-colors text-label-sm font-semibold"
         >
           <span className="material-symbols-outlined text-secondary text-[18px]">lock_person</span>

@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 from sqlalchemy import Column, String, DateTime, Float, ForeignKey, Integer
 from sqlalchemy.dialects.postgresql import UUID
 from geoalchemy2 import Geometry
@@ -21,7 +21,7 @@ class SpillRegion(Base):
     # They can be calculated from geometry when needed
     confidence = Column(Float, nullable=False)  # 0 to 1
     mask_uri = Column(String, nullable=True)  # URI to region-specific mask in object storage
-    created_at = Column(DateTime, default=lambda: datetime.now(UTC), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
     # Relationship to SlickDetection
     detection = relationship("SlickDetection", back_populates="regions")

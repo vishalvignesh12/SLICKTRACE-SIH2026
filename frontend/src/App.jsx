@@ -15,14 +15,28 @@ import SettingsView from './components/views/SettingsView';
 
 // View Router
 function ActiveViewRenderer() {
-  const { activeScreen } = useNavigation();
+  const { activeScreen, isAuthenticated, authLoading } = useNavigation();
 
-  // If on login screen, render standalone full-viewport login view
-  if (activeScreen === 'login') {
+  // 1. Initial auth verification loading state (prevents auth flashes / race conditions)
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-surface text-on-surface">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+          <span className="text-label-md text-on-surface-variant font-semibold">
+            Verifying Operational Terminal Credentials...
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  // 2. Unauthenticated or explicit login screen -> render standalone login view
+  if (!isAuthenticated || activeScreen === 'login') {
     return <LoginView />;
   }
 
-  // Active view switcher inside main operational shell
+  // 3. Authenticated operational shell
   const renderCurrentView = () => {
     switch (activeScreen) {
       case 'dashboard':

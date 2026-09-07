@@ -24,6 +24,12 @@ venv/
 env/
 
 # =========================
+# Ingestion Worker State
+# =========================
+scripts/ingestion/state/
+scripts/ingestion/.env
+
+# =========================
 # Node / Frontend
 # =========================
 
@@ -103,4 +109,3 @@ Thumbs.db
 
 tmp/
 temp/
-

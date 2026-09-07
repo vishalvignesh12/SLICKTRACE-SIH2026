@@ -25,14 +25,21 @@ async def list_scenes(db: AsyncSession = Depends(get_db)):
     return [
         SceneResponse(
             id=s.id,
+            source=s.source,
+            scene_id=s.scene_id,
             satellite=s.satellite,
+            sensor=s.sensor,
             product_type=s.product_type,
             polarization=s.polarization,
-            timestamp=s.timestamp,
+            acquisition_time=s.acquisition_time,
+            processing_time=s.processing_time,
             bbox=to_geojson_polygon(s.bbox),
             image_url=s.image_url,
             thumbnail_url=s.thumbnail_url,
-            created_at=s.created_at
+            scene_metadata=s.scene_metadata,
+            status=s.status,
+            created_at=s.created_at,
+            updated_at=s.updated_at
         ) for s in scenes
     ]
 
@@ -47,14 +54,21 @@ async def get_scene(id: UUID, db: AsyncSession = Depends(get_db)):
         
     return SceneResponse(
         id=s.id,
+        source=s.source,
+        scene_id=s.scene_id,
         satellite=s.satellite,
+        sensor=s.sensor,
         product_type=s.product_type,
         polarization=s.polarization,
-        timestamp=s.timestamp,
+        acquisition_time=s.acquisition_time,
+        processing_time=s.processing_time,
         bbox=to_geojson_polygon(s.bbox),
         image_url=s.image_url,
         thumbnail_url=s.thumbnail_url,
-        created_at=s.created_at
+        scene_metadata=s.scene_metadata,
+        status=s.status,
+        created_at=s.created_at,
+        updated_at=s.updated_at
     )
 
 @router.post("", response_model=SceneResponse, status_code=status.HTTP_201_CREATED)
@@ -63,13 +77,19 @@ async def create_scene(req: SceneCreate, db: AsyncSession = Depends(get_db)):
     geom = from_shape(shape(req.bbox.model_dump()), srid=4326)
 
     s = SatelliteScene(
+        source=req.source,
+        scene_id=req.scene_id,
         satellite=req.satellite,
+        sensor=req.sensor,
         product_type=req.product_type,
         polarization=req.polarization,
-        timestamp=req.timestamp,
+        acquisition_time=req.acquisition_time,
+        processing_time=req.processing_time,
         bbox=geom,
         image_url=req.image_url,
-        thumbnail_url=req.thumbnail_url
+        thumbnail_url=req.thumbnail_url,
+        scene_metadata=req.scene_metadata,
+        status=req.status or 'RECEIVED'
     )
     db.add(s)
     await db.commit()
@@ -77,14 +97,21 @@ async def create_scene(req: SceneCreate, db: AsyncSession = Depends(get_db)):
 
     return SceneResponse(
         id=s.id,
+        source=s.source,
+        scene_id=s.scene_id,
         satellite=s.satellite,
+        sensor=s.sensor,
         product_type=s.product_type,
         polarization=s.polarization,
-        timestamp=s.timestamp,
+        acquisition_time=s.acquisition_time,
+        processing_time=s.processing_time,
         bbox=to_geojson_polygon(s.bbox),
         image_url=s.image_url,
         thumbnail_url=s.thumbnail_url,
-        created_at=s.created_at
+        scene_metadata=s.scene_metadata,
+        status=s.status,
+        created_at=s.created_at,
+        updated_at=s.updated_at
     )
 
 

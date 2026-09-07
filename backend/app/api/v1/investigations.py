@@ -64,8 +64,8 @@ async def get_investigation_endpoint(
 
 @router.get("/", response_model=List[InvestigationEntityResponse])
 async def list_investigations_endpoint(
-    skip: int = 0,
-    limit: int = Query(100, lte=100),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=100),
     status: Optional[str] = None,
     priority: Optional[str] = None,
     detection_id: Optional[UUID] = None,
@@ -146,7 +146,24 @@ async def get_investigation_timeline_endpoint(
         .order_by(InvestigationEvent.created_at.desc())
     )
     events = result.scalars().all()
-    return [InvestigationEventResponse.from_orm(event) for event in events]
+    res_events = []
+    for event in events:
+        meta = event.event_metadata
+        if isinstance(meta, str):
+            import json
+            try:
+                meta = json.loads(meta)
+            except Exception:
+                meta = {}
+        res_events.append(InvestigationEventResponse(
+            id=event.id,
+            investigation_id=event.investigation_id,
+            event_type=event.event_type,
+            message=event.message,
+            event_metadata=meta,
+            created_at=event.created_at
+        ))
+    return res_events
 
 
 @router.get("/by-incident/{incident_id}", response_model=InvestigationAggregatedResponse)

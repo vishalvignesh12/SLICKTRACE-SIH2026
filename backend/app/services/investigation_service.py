@@ -1,6 +1,7 @@
 from uuid import UUID
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional, Tuple
+import json
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, delete, and_
 from sqlalchemy.exc import IntegrityError
@@ -51,7 +52,7 @@ async def create_investigation(db: AsyncSession, investigation_in: Investigation
         investigation_id=investigation.id,
         event_type="INVESTIGATION_CREATED",
         message="Investigation created",
-        event_metadata={}  # Could include detection info if needed
+        event_metadata=json.dumps({})  # Could include detection info if needed
     )
     db.add(event)
 
@@ -90,7 +91,14 @@ async def get_investigations(
     if conditions:
         query = query.where(and_(*conditions))
 
-    query = query.offset(skip).limit(limit)
+    if hasattr(skip, "default"):
+        skip = skip.default
+    if hasattr(limit, "default"):
+        limit = limit.default
+    skip_val = int(skip) if skip is not None else 0
+    limit_val = int(limit) if limit is not None else 100
+
+    query = query.offset(skip_val).limit(limit_val)
     result = await db.execute(query)
     return result.scalars().all()
 
@@ -152,7 +160,7 @@ async def change_investigation_status(
         investigation_id=investigation.id,
         event_type="STATUS_CHANGED",
         message=f"Status changed from {old_status.value} to {new_status.value}",
-        event_metadata={"from": old_status.value, "to": new_status.value}
+        event_metadata=json.dumps({"from": old_status.value, "to": new_status.value})
     )
     db.add(event)
 
@@ -166,11 +174,12 @@ async def add_investigation_event(
     """
     Add a custom event to an investigation.
     """
+    meta = event_in.event_metadata if isinstance(event_in.event_metadata, str) else json.dumps(event_in.event_metadata or {})
     event = InvestigationEvent(
         investigation_id=event_in.investigation_id,
         event_type=event_in.event_type,
         message=event_in.message,
-        event_metadata=event_in.event_metadata or {}
+        event_metadata=meta
     )
     db.add(event)
     await db.flush()
@@ -310,7 +319,7 @@ async def get_investigation_details(db: AsyncSession, incident_id: UUID) -> Opti
                 "score": score.score,
                 "proximity": score.proximity_score,
                 "temporality": score.temporality_score,
-                "trajectory_parity": score.trajectory_parity,
+                "trajectory_parity": score.trajectory_score,
                 "anomaly_score": score.anomaly_score,
                 "anomaly_flag": score.anomaly_flag
             }

@@ -29,7 +29,7 @@ def include_object(object, name, type_, reflected, compare_to):
         app_tables = {
             "incidents", "users", "vessels", "ais_tracks", "satellite_scenes",
             "slick_detections", "drift_results", "attribution_scores", "ml_inference_log",
-            "investigations", "investigation_events",
+            "investigations", "investigation_events", "spill_regions",
             "alembic_version"
         }
         if name not in app_tables:
